@@ -1,4 +1,6 @@
-// Wire protocol shared by master and client (see ../../04-sync-and-signaling.md).
+// Wire protocol shared by Maestro and Players (see ../../04-sync-and-signaling.md).
+
+import type { SongObject } from './model';
 
 // The device's job in a session. Maestro = holds audio + clock authority;
 // Player = follows. (Not to be confused with a musical "Role".)
@@ -28,7 +30,13 @@ export interface TransportMsg {
   loop: LoopRange | null;
 }
 
-/** client clock/ping → master, master clock/pong → client */
+/** A Role's chart: handed off (Player → Maestro) or distributed (Maestro → all). */
+export interface ChartMsg {
+  roleId: string;
+  objects: SongObject[];
+}
+
+/** Player clock/ping → Maestro, Maestro clock/pong → Player */
 export interface PingMsg {
   t1: number;
 }

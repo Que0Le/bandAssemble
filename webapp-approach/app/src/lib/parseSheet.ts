@@ -87,6 +87,29 @@ export function parseSheet(text: string): SongObject[] {
 }
 
 /**
+ * Re-apply timings from a previous version of a chart after re-parsing its text
+ * (the sheet format carries no per-object times). Objects that line up by index
+ * keep their old start/end; trailing new objects continue after the last known
+ * time. Good enough for text edits that don't reorder; re-time in the full
+ * editor for big structural changes.
+ */
+export function reTime(next: SongObject[], prev: SongObject[]): SongObject[] {
+  let t = 0;
+  for (let i = 0; i < next.length; i++) {
+    if (i < prev.length) {
+      next[i].startSec = prev[i].startSec;
+      next[i].endSec = prev[i].endSec;
+      t = prev[i].endSec;
+    } else {
+      next[i].startSec = t;
+      if (next[i].type !== 'label') t += 3;
+      next[i].endSec = t;
+    }
+  }
+  return next;
+}
+
+/**
  * Assign simple sequential times so a freshly parsed sheet has an order to edit.
  * Each timed object gets `perSec` seconds; labels take the next object's start.
  * The user then refines with tap-to-time.

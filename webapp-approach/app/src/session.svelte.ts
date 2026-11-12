@@ -12,7 +12,9 @@ import { WsTransport } from './lib/transport';
 import { ClockSync } from './lib/clockSync';
 import { MasterAudio } from './lib/audio';
 import { PROJECT, labels } from './lib/model';
-import type { Seat, TransportMsg, PingMsg, PongMsg, LoopRange } from './lib/protocol';
+import type { SongObject } from './lib/model';
+import { charts, setChart } from './view.svelte';
+import type { Seat, TransportMsg, PingMsg, PongMsg, LoopRange, ChartMsg } from './lib/protocol';
 
 const params = new URLSearchParams(location.search);
 const seatParam = params.get('seat');
@@ -82,7 +84,14 @@ export class Session {
         const m = labels(PROJECT.base.lyrics).find((x) => x.label === p.label);
         if (m) this.seek(m.atSec);
       });
-      this.transport.on('session/hello', () => this.broadcast());
+      this.transport.on('session/hello', () => {
+        this.broadcast();
+        this.distributeCharts(); // bring a late joiner up to date
+      });
+      this.transport.on('chart/handoff', (p: ChartMsg) => {
+        setChart(p.roleId, p.objects); // apply, then distribute to everyone
+        this.transport.send('chart/update', p);
+      });
     } else {
       this.transport.on('state/transport', (p: TransportMsg) => {
         this.follow = {
@@ -102,6 +111,22 @@ export class Session {
         this.rtt = this.clock.bestRtt;
         this.lastSync = this.clock.lastSync;
       });
+      this.transport.on('chart/update', (p: ChartMsg) => setChart(p.roleId, p.objects));
+    }
+  }
+
+  // Apply an edited chart locally, then share it: the Maestro distributes it to
+  // everyone; a Player sends it up to the Maestro to distribute. Last one wins.
+  handOff(roleId: string, objects: SongObject[]) {
+    setChart(roleId, objects);
+    if (this.seat === 'maestro') this.transport.send('chart/update', { roleId, objects });
+    else this.transport.send('chart/handoff', { roleId, objects });
+  }
+
+  private distributeCharts() {
+    if (this.seat !== 'maestro') return;
+    for (const roleId of Object.keys(charts)) {
+      this.transport.send('chart/update', { roleId, objects: charts[roleId] });
     }
   }
 

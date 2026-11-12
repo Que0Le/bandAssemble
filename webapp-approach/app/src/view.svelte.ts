@@ -1,12 +1,25 @@
-// Which Role this device is currently viewing. Shared reactive state so the
-// chart, the role switcher, and (later) the editor all agree. Anyone can switch
-// Roles freely — no security. The playhead/sync is unaffected by the choice.
+// Device-local view state: which Role is shown, whether we're editing, and the
+// reactive per-Role chart objects. Chart updates — from a local hand-off or from
+// the Maestro's distribution — replace an entry in `charts`, which re-renders.
+// Role choice and edit state are per-device; the playhead/sync is unaffected.
 
 import { PROJECT } from './lib/model';
-import type { Chart } from './lib/model';
+import type { SongObject } from './lib/model';
 
-export const view = $state<{ roleId: string }>({ roleId: PROJECT.roles[0].id });
+const seed: Record<string, SongObject[]> = {};
+for (const r of PROJECT.roles) seed[r.id] = PROJECT.charts[r.id]?.objects ?? [];
 
-export function currentChart(): Chart {
-  return PROJECT.charts[view.roleId] ?? PROJECT.charts[PROJECT.roles[0].id];
+export const view = $state<{ roleId: string; editing: boolean }>({
+  roleId: PROJECT.roles[0].id,
+  editing: false,
+});
+
+export const charts = $state<Record<string, SongObject[]>>(seed);
+
+export function currentObjects(): SongObject[] {
+  return charts[view.roleId] ?? [];
+}
+
+export function setChart(roleId: string, objects: SongObject[]): void {
+  charts[roleId] = objects;
 }

@@ -1,13 +1,14 @@
 <script lang="ts">
   import { session } from '../session.svelte';
   import { PROJECT, objectIndexAt, nextStart } from '../lib/model';
-  import { view, currentChart } from '../view.svelte';
+  import { view, currentObjects } from '../view.svelte';
   import { chordSvg } from '../lib/chordDiagram';
   import { sheet } from '../lib/serialize';
   import { copyText } from '../lib/clipboard';
   import ObjectView from './ObjectView.svelte';
+  import ChartEdit from './ChartEdit.svelte';
   const s = session!;
-  const objects = $derived(currentChart().objects);
+  const objects = $derived(currentObjects());
 
   let chartH = $state(360);
   let els = $state<HTMLElement[]>([]);
@@ -54,19 +55,28 @@
     </select>
   </label>
   <span class="spacer"></span>
-  <span class="hint">Select any text to copy — or</span>
-  <button class="copy-btn" onclick={copySheet}>{copied ? '✓ Copied' : '⧉ Copy sheet'}</button>
+  {#if !view.editing}
+    <span class="hint">Select any text to copy — or</span>
+    <button class="copy-btn" onclick={copySheet}>{copied ? '✓ Copied' : '⧉ Copy sheet'}</button>
+  {/if}
+  <button class="copy-btn" onclick={() => (view.editing = !view.editing)}>
+    {view.editing ? '✕ Close' : '✎ Edit'}
+  </button>
 </div>
 
-<div class="chart" bind:clientHeight={chartH}>
-  <div class="scroller" style:transform={`translateY(${chartH / 2 - y}px)`}>
-    {#each objects as obj, i (obj.id)}
-      <div class="obj" class:active={i === idx} bind:this={els[i]}>
-        <ObjectView {obj} onChordEnter={showTip} onChordLeave={hideTip} />
-      </div>
-    {/each}
+{#if view.editing}
+  <ChartEdit />
+{:else}
+  <div class="chart" bind:clientHeight={chartH}>
+    <div class="scroller" style:transform={`translateY(${chartH / 2 - y}px)`}>
+      {#each objects as obj, i (obj.id)}
+        <div class="obj" class:active={i === idx} bind:this={els[i]}>
+          <ObjectView {obj} onChordEnter={showTip} onChordLeave={hideTip} />
+        </div>
+      {/each}
+    </div>
   </div>
-</div>
+{/if}
 
 {#if tip}
   <div class="chord-tip" style:left={`${tip.x}px`} style:top={`${tip.y}px`}>
