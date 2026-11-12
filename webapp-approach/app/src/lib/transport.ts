@@ -3,13 +3,13 @@
 
 import type { Envelope, Role } from './protocol';
 
-export type MsgHandler = (payload: any, env: Envelope) => void;
 export type StatusHandler = (status: 'connecting' | 'connected' | 'disconnected') => void;
+type AnyHandler = (payload: unknown, env: Envelope) => void;
 
 export interface Transport {
   connect(): void;
   send(kind: string, payload: unknown): void;
-  on(kind: string, fn: MsgHandler): void;
+  on<T = unknown>(kind: string, fn: (payload: T, env: Envelope) => void): void;
   onStatus(fn: StatusHandler): void;
   close(): void;
 }
@@ -25,7 +25,7 @@ function relayUrl(sessionId: string): string {
 
 export class WsTransport implements Transport {
   private ws?: WebSocket;
-  private handlers = new Map<string, MsgHandler>();
+  private handlers = new Map<string, AnyHandler>();
   private statusFn: StatusHandler = () => {};
 
   constructor(
@@ -68,8 +68,8 @@ export class WsTransport implements Transport {
     this.ws.send(JSON.stringify(env));
   }
 
-  on(kind: string, fn: MsgHandler): void {
-    this.handlers.set(kind, fn);
+  on<T = unknown>(kind: string, fn: (payload: T, env: Envelope) => void): void {
+    this.handlers.set(kind, fn as AnyHandler);
   }
   onStatus(fn: StatusHandler): void {
     this.statusFn = fn;

@@ -9,8 +9,11 @@ export class ClockSync {
   bestRtt = Infinity;
   lastSync = 0;
 
-  private burstTimer?: number;
-  private resyncTimer?: number;
+  private burstTimer?: ReturnType<typeof setInterval>;
+  private resyncTimer?: ReturnType<typeof setInterval>;
+  private onVisible = () => {
+    if (!document.hidden) this.burst();
+  };
 
   constructor(private send: (kind: string, payload: unknown) => void) {}
 
@@ -37,19 +40,18 @@ export class ClockSync {
     this.burstTimer = setInterval(() => {
       this.send('clock/ping', { t1: this.now() });
       if (++n >= 8) clearInterval(this.burstTimer);
-    }, 60) as unknown as number;
+    }, 60);
   }
 
   start(): void {
     this.burst();
-    this.resyncTimer = setInterval(() => this.burst(), 20000) as unknown as number;
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) this.burst();
-    });
+    this.resyncTimer = setInterval(() => this.burst(), 20000);
+    document.addEventListener('visibilitychange', this.onVisible);
   }
 
   stop(): void {
     clearInterval(this.burstTimer);
     clearInterval(this.resyncTimer);
+    document.removeEventListener('visibilitychange', this.onVisible);
   }
 }

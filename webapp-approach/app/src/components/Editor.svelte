@@ -3,8 +3,8 @@
   import type { Project, SongObject } from '../lib/model';
   import { parseSheet, autoTime } from '../lib/parseSheet';
   import { objectsText } from '../lib/serialize';
-  import { parseInline } from '../lib/chords';
   import { copyText } from '../lib/clipboard';
+  import ObjectView from './ObjectView.svelte';
 
   const r2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -208,19 +208,8 @@
     <h2>Preview</h2>
     <div class="prev">
       {#each objects as o, i (o.id)}
-        <div class="pobj {o.type}" class:on={i === activeIdx}>
-          {#if o.type === 'label'}
-            <span class="plabel">{o.text}</span>
-          {:else if o.type === 'tab'}
-            <pre class="ptab">{(o.caption ? o.caption + '\n' : '') + o.lines.join('\n')}</pre>
-          {:else}
-            {#if o.text}<div class="ptext">
-                {#each parseInline(o.text) as seg}{#if seg.chord}<span class="pchord">[{seg.chord}]</span
-                    >{/if}<span>{seg.text}</span>{/each}
-              </div>{/if}
-            {#if o.strum}<div class="pstrum">{o.strum}</div>{/if}
-            {#if o.note}<div class="pnote">{o.note}</div>{/if}
-          {/if}
+        <div class="pobj" class:on={i === activeIdx}>
+          <ObjectView obj={o} />
         </div>
       {/each}
     </div>
@@ -378,34 +367,5 @@
   .pobj.on {
     opacity: 1;
     background: #161f2a;
-  }
-  .plabel {
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: #7fd0ff;
-  }
-  .ptext {
-    font-size: 1.02rem;
-    color: #e8edf5;
-  }
-  .pchord {
-    color: #ffcf6b;
-    font-weight: 700;
-  }
-  .pstrum {
-    font-family: ui-monospace, Consolas, monospace;
-    color: #9fe0b0;
-  }
-  .pnote {
-    font-size: 0.8rem;
-    font-style: italic;
-    color: #8b93a3;
-  }
-  .ptab {
-    font-family: ui-monospace, Consolas, monospace;
-    font-size: 0.82rem;
-    color: #cfd6e2;
-    margin: 2px 0 0;
   }
 </style>
