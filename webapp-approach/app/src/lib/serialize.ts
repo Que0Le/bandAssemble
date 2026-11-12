@@ -3,7 +3,7 @@
 // [chords], so serializing is mostly joining rows; this is the inverse that
 // guarantees a clean, paste-able chord sheet. See ../../03-data-model.md.
 
-import type { Project, SongObject } from './model';
+import type { SongObject } from './model';
 
 /** One object as its text block (no trailing newline). */
 export function objectText(o: SongObject): string {
@@ -30,7 +30,7 @@ export function objectsText(objects: SongObject[]): string {
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
 }
 
-/** The whole arrangement as a copy-ready chord sheet (title + body). */
-export function projectText(p: Project): string {
-  return `${p.title}\n\n${objectsText(p.objects)}`;
+/** A copy-ready chord sheet for one chart: title + body. */
+export function sheet(title: string, objects: SongObject[]): string {
+  return `${title}\n\n${objectsText(objects)}`;
 }

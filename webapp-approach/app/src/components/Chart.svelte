@@ -1,12 +1,13 @@
 <script lang="ts">
   import { session } from '../session.svelte';
   import { PROJECT, objectIndexAt, nextStart } from '../lib/model';
+  import { view, currentChart } from '../view.svelte';
   import { chordSvg } from '../lib/chordDiagram';
-  import { projectText } from '../lib/serialize';
+  import { sheet } from '../lib/serialize';
   import { copyText } from '../lib/clipboard';
   import ObjectView from './ObjectView.svelte';
   const s = session!;
-  const objects = PROJECT.objects;
+  const objects = $derived(currentChart().objects);
 
   let chartH = $state(360);
   let els = $state<HTMLElement[]>([]);
@@ -21,7 +22,7 @@
     const el = els[i];
     if (i < 0 || !el) return 0;
     const start = objects[i].startSec;
-    const end = nextStart(PROJECT, i);
+    const end = nextStart(objects, i, PROJECT.base.lengthSec);
     const frac = Math.min(1, Math.max(0, (s.playhead - start) / Math.max(0.001, end - start)));
     return el.offsetTop + frac * el.offsetHeight;
   });
@@ -38,7 +39,7 @@
   let copied = $state(false);
   let copyTimer: ReturnType<typeof setTimeout> | undefined;
   async function copySheet() {
-    const ok = await copyText(projectText(PROJECT));
+    const ok = await copyText(sheet(PROJECT.title, objects));
     copied = ok;
     clearTimeout(copyTimer);
     copyTimer = setTimeout(() => (copied = false), 1600);
@@ -46,6 +47,13 @@
 </script>
 
 <div class="toolbar">
+  <label class="role-pick"
+    >Role
+    <select bind:value={view.roleId}>
+      {#each PROJECT.roles as r}<option value={r.id}>{r.label}</option>{/each}
+    </select>
+  </label>
+  <span class="spacer"></span>
   <span class="hint">Select any text to copy — or</span>
   <button class="copy-btn" onclick={copySheet}>{copied ? '✓ Copied' : '⧉ Copy sheet'}</button>
 </div>
@@ -75,14 +83,31 @@
   .toolbar {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
     gap: 10px;
     margin-bottom: 8px;
     user-select: none;
   }
+  .toolbar .spacer {
+    flex: 1;
+  }
   .toolbar .hint {
     color: #8b93a3;
     font-size: 0.78rem;
+  }
+  .role-pick {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    color: #8b93a3;
+  }
+  .role-pick select {
+    background: #0f1218;
+    color: #e6edf3;
+    border: 1px solid #2a3340;
+    border-radius: 8px;
+    padding: 4px 8px;
+    font-size: 0.82rem;
   }
   .copy-btn {
     cursor: pointer;

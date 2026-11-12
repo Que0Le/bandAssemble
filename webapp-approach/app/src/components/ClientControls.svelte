@@ -2,7 +2,7 @@
   import { session } from '../session.svelte';
   import { PROJECT, labels } from '../lib/model';
   const s = session!;
-  const marks = labels(PROJECT);
+  const marks = labels(PROJECT.base.lyrics);
 </script>
 
 <p class="hint">Request the band to start from a section:</p>

@@ -62,7 +62,7 @@ export class Session {
     this.seat = seat;
     this.transport = new WsTransport(SESSION_ID, DEVICE_ID, seat);
     this.clock = new ClockSync((k, p) => this.transport.send(k, p));
-    if (seat === 'maestro') this.audio = new MasterAudio(PROJECT.bpm ?? 100);
+    if (seat === 'maestro') this.audio = new MasterAudio(PROJECT.base.bpm ?? 100);
     this.wire();
   }
 
@@ -79,7 +79,7 @@ export class Session {
       this.transport.on('intent/pause', () => this.maestroPause());
       this.transport.on('intent/seek', (p: { atSec: number }) => this.seek(p.atSec));
       this.transport.on('intent/jumpMarker', (p: { label: string }) => {
-        const m = labels(PROJECT).find((x) => x.label === p.label);
+        const m = labels(PROJECT.base.lyrics).find((x) => x.label === p.label);
         if (m) this.seek(m.atSec);
       });
       this.transport.on('session/hello', () => this.broadcast());
@@ -125,7 +125,7 @@ export class Session {
         if (this.tState === 'playing' && this.loop && this.audio!.playheadSec() >= this.loop.toSec) {
           this.seek(this.loop.fromSec);
         }
-        if (this.audio!.playheadSec() >= PROJECT.lengthSec) this.maestroPause();
+        if (this.audio!.playheadSec() >= PROJECT.base.lengthSec) this.maestroPause();
       }, 50);
     }
 
@@ -196,7 +196,7 @@ export class Session {
   }
   seek(atSec: number) {
     if (this.seat !== 'maestro') return;
-    this.audio!.seek(Math.max(0, Math.min(atSec, PROJECT.lengthSec)));
+    this.audio!.seek(Math.max(0, Math.min(atSec, PROJECT.base.lengthSec)));
     this.broadcast();
   }
   restart() {

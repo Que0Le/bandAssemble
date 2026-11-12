@@ -2,7 +2,7 @@
   import { session } from '../session.svelte';
   import { PROJECT, labels } from '../lib/model';
   const s = session!;
-  const marks = labels(PROJECT);
+  const marks = labels(PROJECT.base.lyrics);
 
   async function onFile(e: Event) {
     const f = (e.target as HTMLInputElement).files?.[0];

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { PROJECT, objectIndexAt } from '../lib/model';
-  import type { Project, SongObject } from '../lib/model';
+  import type { SongObject } from '../lib/model';
   import { parseSheet, autoTime } from '../lib/parseSheet';
   import { objectsText } from '../lib/serialize';
   import { copyText } from '../lib/clipboard';
@@ -8,7 +8,9 @@
 
   const r2 = (n: number) => Math.round(n * 100) / 100;
 
-  const initialSheet = objectsText(PROJECT.objects);
+  const firstRole = PROJECT.roles[0].id;
+  const initialSheet = objectsText(PROJECT.charts[firstRole].objects);
+  let roleId = $state(firstRole);
   let title = $state(PROJECT.title);
   let sheet = $state(initialSheet);
   let objects = $state<SongObject[]>(autoTime(parseSheet(initialSheet)));
@@ -36,10 +38,10 @@
     tapIdx = 0;
     note('parsed ' + objects.length + ' objects');
   }
-  function loadDemo() {
-    title = PROJECT.title;
-    sheet = objectsText(PROJECT.objects);
+  function loadRole() {
+    sheet = objectsText(PROJECT.charts[roleId].objects);
     parse();
+    note('loaded ' + roleId + ' chart');
   }
 
   function onFile(e: Event) {
@@ -94,24 +96,13 @@
     return o.text || o.strum || (o.note ? '(' + o.note + ')' : '(empty)');
   }
 
-  function currentProject(): Project {
-    const lengthSec = objects.reduce((m, o) => Math.max(m, o.endSec), 0);
-    return {
-      schemaVersion: 2,
-      id: title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'untitled',
-      title,
-      lengthSec,
-      bpm: PROJECT.bpm,
-      objects,
-    };
-  }
   async function copySheet() {
     const ok = await copyText(`${title}\n\n${objectsText(objects)}`);
     note(ok ? 'sheet copied' : 'copy failed');
   }
   async function copyJson() {
-    const ok = await copyText(JSON.stringify(currentProject(), null, 2));
-    note(ok ? 'project JSON copied' : 'copy failed');
+    const ok = await copyText(JSON.stringify({ title, roleId, objects }, null, 2));
+    note(ok ? 'chart JSON copied' : 'copy failed');
   }
 </script>
 
@@ -120,8 +111,14 @@
 <section class="editor">
   <div class="ed-head">
     <input class="title-in" bind:value={title} aria-label="song title" />
+    <label class="role-sel"
+      >Role
+      <select bind:value={roleId}>
+        {#each PROJECT.roles as r}<option value={r.id}>{r.label}</option>{/each}
+      </select>
+    </label>
+    <button class="btn" onclick={loadRole}>Load role</button>
     <div class="spacer"></div>
-    <button class="btn" onclick={loadDemo}>Load demo</button>
     <button class="btn" onclick={copySheet}>⧉ Copy sheet</button>
     <button class="btn" onclick={copyJson}>⧉ Copy JSON</button>
     {#if copied}<span class="flash">{copied}</span>{/if}
@@ -244,6 +241,20 @@
   .flash {
     color: #9fe0b0;
     font-size: 0.82rem;
+  }
+  .role-sel {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #8b93a3;
+    font-size: 0.85rem;
+  }
+  .role-sel select {
+    background: #0f1218;
+    color: #e6edf3;
+    border: 1px solid #2a3340;
+    border-radius: 8px;
+    padding: 5px 8px;
   }
   .ed-grid {
     display: grid;

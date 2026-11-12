@@ -1,29 +1,25 @@
-// The real arrangement model — a flat array of timed objects.
-// See ../../03-data-model.md. Positions are seconds into the master audio.
+// The arrangement model — a shared Base plus one Chart per Role.
+// See ../../03-data-model.md and ../SPEC.md §Terminology.
+// Positions are seconds into the master audio.
 
 export interface ObjBase {
   id: string;
   startSec: number;
   endSec: number; // for 'label' this is ignored (a label is a point)
-  roles?: string[]; // optional: role ids that see this object (omit = everyone)
 }
 
-// The workhorse — one displayed line-block. text/strum/note all optional:
-//   text only         -> sung lyric line
-//   text = chords only -> instrumental bar, e.g. "[Em] [Em] [Am] [C]"
-//   strum only         -> a rhythm-only line
-//   note only          -> a cue
+// The workhorse — one displayed line-block. text/strum/note all optional.
 export interface LineObject extends ObjBase {
   type: 'line';
   text?: string; // lyrics with EMBEDDED inline chords: "[Em]So close how [D]far"
-  strum?: string; // rhythm row shown below (Unicode glyphs: down up x > ~)
+  strum?: string; // rhythm row shown below (Unicode glyphs; spaces preserved)
   note?: string; // free annotation shown below
 }
 
 // A section name / jump target. A point in time.
 export interface LabelObject extends ObjBase {
   type: 'label';
-  text: string; // "Intro", "Verse 1", "Chorus"
+  text: string;
   color?: string;
 }
 
@@ -36,13 +32,43 @@ export interface TabObject extends ObjBase {
 
 export type SongObject = LineObject | LabelObject | TabObject;
 
-export interface Project {
-  schemaVersion: 2;
-  id: string;
-  title: string;
+// ---- Roles & Charts ------------------------------------------------------
+
+export type InstrumentKind = 'vocals' | 'guitar' | 'bass' | 'keys' | 'drums' | 'other';
+
+/** A musical part. `kind` is only a hint for default notation. */
+export interface Role {
+  id: string; // "guitar", "vocal1", "bass"…
+  kind: InstrumentKind;
+  label: string; // "Guitar", "Vocal 1"
+}
+
+/** One Role's notation: a flat, ordered array of timed objects. */
+export interface Chart {
+  roleId: string;
+  objects: SongObject[]; // kept sorted by startSec
+}
+
+export interface AudioRef {
+  fileName: string;
+  durationSec: number;
+}
+
+/** The Maestro-authored skeleton every Chart clones from. */
+export interface Base {
+  audio?: AudioRef; // the file itself lives only on the Maestro
   lengthSec: number; // master audio length; positions are seconds into it
   bpm?: number; // optional, for the metronome only
-  objects: SongObject[]; // ordered by startSec
+  lyrics: SongObject[]; // timed lyric lines (+ labels): the clonable skeleton
+}
+
+export interface Project {
+  schemaVersion: 3;
+  id: string;
+  title: string;
+  base: Base;
+  roles: Role[];
+  charts: Record<string, Chart>; // roleId -> Chart
 }
 
 // ---- helpers -------------------------------------------------------------
@@ -57,21 +83,24 @@ export function objectIndexAt(objects: SongObject[], head: number): number {
   return idx;
 }
 
-/** The start time of the object after `i` (or the song end). */
-export function nextStart(p: Project, i: number): number {
-  return i < p.objects.length - 1 ? p.objects[i + 1].startSec : p.lengthSec;
+/** Start time of the object after `i`, or `lengthSec` for the last one. */
+export function nextStart(objects: SongObject[], i: number, lengthSec: number): number {
+  return i < objects.length - 1 ? objects[i + 1].startSec : lengthSec;
 }
 
 /** Label objects as simple jump targets. */
-export function labels(p: Project): Array<{ atSec: number; label: string }> {
-  return p.objects
+export function labels(objects: SongObject[]): Array<{ atSec: number; label: string }> {
+  return objects
     .filter((o): o is LabelObject => o.type === 'label')
     .map((o) => ({ atSec: o.startSec, label: o.text }));
 }
 
+/** Deep-copy objects with fresh ids (used when cloning the Base into a Chart). */
+export function cloneObjects(objs: SongObject[]): SongObject[] {
+  return objs.map((o) => ({ ...o, id: id(), ...(o.type === 'tab' ? { lines: [...o.lines] } : {}) }));
+}
+
 // ---- sample arrangement (a Vietnamese ballad) ----------------------------
-// Exercises every object type: label, line (text+chords), strum, note,
-// chords-only line, and a tab block. Timings are synthetic but plausible.
 
 let n = 0;
 const id = () => `o${n++}`;
@@ -90,43 +119,70 @@ const label = (startSec: number, text: string): LabelObject => ({
   text,
 });
 
+// The Guitar chart — the rich part (chords + strum + a solo tab).
+const guitarObjects: SongObject[] = [
+  label(0, 'Verse 1'),
+  line(0, 3, '[G]Đường tất nhiên còn dài', '↓   ↓ ↑   ↓   ↑'),
+  line(3, 6, '[D]Ai tất nhiên cũng [G]ngại'),
+  line(6, 9, '[C]Nhưng sực bạn dừng [Am]chân một bước'),
+  line(9, 12, '[A7]Đưa mắt ngước lên [D]chông'),
+  line(12, 15, '[G]Thời giờ tất nhiên không nhiều'),
+  line(15, 18, '[D]Trời giờ đã buông ngân [G]chiều'),
+  line(18, 21, 'Nhưng [C]hoa những ngày mà [Am]không biết ngắm'),
+  line(21, 24, '[D]Đời phí lắm biết [G]không'),
+  line(24, 26, '[C] [G]', undefined, 'turnaround'),
+  label(26, 'Pre-chorus'),
+  line(26, 29, 'Vì [Am]ta đã lang bạt lâu quá lâu', '↓↓ ↑ ↑↓'),
+  line(29, 32, '[Em]Nhưng nghĩ thơ chẳng ra mấy câu'),
+  line(32, 36, '[A7]Đừng để lại tuột mất cơ duyên trời [D]ban nhé', undefined, 'rit. — slow'),
+  label(36, 'Solo'),
+  {
+    type: 'tab',
+    id: id(),
+    startSec: 36,
+    endSec: 46,
+    caption: 'Em lick',
+    lines: [
+      'e|-----------------|',
+      'B|-----------------|',
+      'G|-------0-2-------|',
+      'D|---0-2-----2-0---|',
+      'A|-2---------------|',
+      'E|-----------------|',
+    ],
+  },
+  line(46, 48, undefined, undefined, 'let ring to the end'),
+];
+
+// The Base = the lyric + timing skeleton: labels + plain lyric lines (chords,
+// strum, tab and notes stripped). A Role's Chart starts as a clone of this.
+function toBaseLyrics(objs: SongObject[]): SongObject[] {
+  const out: SongObject[] = [];
+  for (const o of objs) {
+    if (o.type === 'label') {
+      out.push(label(o.startSec, o.text));
+    } else if (o.type === 'line') {
+      const plain = (o.text ?? '').replace(/\[[^\]]*\]/g, '').replace(/\s+/g, ' ').trim();
+      if (plain) out.push(line(o.startSec, o.endSec, plain));
+    }
+    // tab and chords-only / empty lines are not part of the lyric skeleton
+  }
+  return out;
+}
+
+const baseLyrics = toBaseLyrics(guitarObjects);
+
 export const PROJECT: Project = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   id: 'sample-ballad',
   title: 'Đường còn dài (demo)',
-  lengthSec: 48,
-  bpm: 76,
-  objects: [
-    label(0, 'Verse 1'),
-    line(0, 3, '[G]Đường tất nhiên còn dài', '↓   ↓ ↑   ↓   ↑'),
-    line(3, 6, '[D]Ai tất nhiên cũng [G]ngại'),
-    line(6, 9, '[C]Nhưng sực bạn dừng [Am]chân một bước'),
-    line(9, 12, '[A7]Đưa mắt ngước lên [D]chông'),
-    line(12, 15, '[G]Thời giờ tất nhiên không nhiều'),
-    line(15, 18, '[D]Trời giờ đã buông ngân [G]chiều'),
-    line(18, 21, 'Nhưng [C]hoa những ngày mà [Am]không biết ngắm'),
-    line(21, 24, '[D]Đời phí lắm biết [G]không'),
-    line(24, 26, '[C] [G]', undefined, 'turnaround'),
-    label(26, 'Pre-chorus'),
-    line(26, 29, 'Vì [Am]ta đã lang bạt lâu quá lâu', '↓↓ ↑ ↑↓'),
-    line(29, 32, '[Em]Nhưng nghĩ thơ chẳng ra mấy câu'),
-    line(32, 36, '[A7]Đừng để lại tuột mất cơ duyên trời [D]ban nhé', undefined, 'rit. — slow'),
-    label(36, 'Solo'),
-    {
-      type: 'tab',
-      id: id(),
-      startSec: 36,
-      endSec: 46,
-      caption: 'Em lick',
-      lines: [
-        'e|-----------------|',
-        'B|-----------------|',
-        'G|-------0-2-------|',
-        'D|---0-2-----2-0---|',
-        'A|-2---------------|',
-        'E|-----------------|',
-      ],
-    },
-    line(46, 48, undefined, undefined, 'let ring to the end'),
+  base: { lengthSec: 48, bpm: 76, lyrics: baseLyrics },
+  roles: [
+    { id: 'guitar', kind: 'guitar', label: 'Guitar' },
+    { id: 'vocal', kind: 'vocals', label: 'Vocal' },
   ],
+  charts: {
+    guitar: { roleId: 'guitar', objects: guitarObjects },
+    vocal: { roleId: 'vocal', objects: cloneObjects(baseLyrics) },
+  },
 };
