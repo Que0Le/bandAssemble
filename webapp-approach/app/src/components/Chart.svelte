@@ -3,6 +3,8 @@
   import { PROJECT, objectIndexAt, nextStart } from '../lib/model';
   import { parseInline } from '../lib/chords';
   import { chordSvg } from '../lib/chordDiagram';
+  import { projectText } from '../lib/serialize';
+  import { copyText } from '../lib/clipboard';
   const s = session!;
   const objects = PROJECT.objects;
 
@@ -31,7 +33,22 @@
     tip = { x: r.left + r.width / 2, y: r.top, name: chord, html: chordSvg(chord) ?? '' };
   }
   const hideTip = () => (tip = null);
+
+  // Copy the whole arrangement as a plain-text chord sheet.
+  let copied = $state(false);
+  let copyTimer: ReturnType<typeof setTimeout> | undefined;
+  async function copySheet() {
+    const ok = await copyText(projectText(PROJECT));
+    copied = ok;
+    clearTimeout(copyTimer);
+    copyTimer = setTimeout(() => (copied = false), 1600);
+  }
 </script>
+
+<div class="toolbar">
+  <span class="hint">Select any text to copy — or</span>
+  <button class="copy-btn" onclick={copySheet}>{copied ? '✓ Copied' : '⧉ Copy sheet'}</button>
+</div>
 
 <div class="chart" bind:clientHeight={chartH}>
   <div class="scroller" style:transform={`translateY(${chartH / 2 - y}px)`}>
@@ -74,6 +91,30 @@
 {/if}
 
 <style>
+  .toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-bottom: 8px;
+    user-select: none;
+  }
+  .toolbar .hint {
+    color: #8b93a3;
+    font-size: 0.78rem;
+  }
+  .copy-btn {
+    cursor: pointer;
+    color: #cfe8ff;
+    background: #182230;
+    border: 1px solid #2a3b4e;
+    border-radius: 8px;
+    padding: 5px 12px;
+    font-size: 0.82rem;
+  }
+  .copy-btn:hover {
+    border-color: #4fd1c5;
+  }
   .chart {
     position: relative;
     height: 56vh;
@@ -91,10 +132,12 @@
     padding: 0 18px;
     will-change: transform;
   }
+  /* Everything in the chart is real, selectable text. */
   .obj {
     padding: 8px 10px;
     border-radius: 8px;
     opacity: 0.5;
+    user-select: text;
     transition:
       opacity 0.12s linear,
       background 0.12s linear;
@@ -150,6 +193,7 @@
     color: #cfd6e2;
     margin: 2px 0 0;
     white-space: pre;
+    user-select: text;
   }
   .chord-tip {
     position: fixed;
