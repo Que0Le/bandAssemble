@@ -127,6 +127,6 @@ export const PROJECT: Project = {
         'E|-----------------|',
       ],
     },
-    line(46, 48, undefined, undefined, '(let ring to the end)'),
+    line(46, 48, undefined, undefined, 'let ring to the end'),
   ],
 };

@@ -20,12 +20,17 @@ export function objectText(o: SongObject): string {
   return rows.join('\n');
 }
 
-/** The whole arrangement as a copy-ready chord sheet. */
-export function projectText(p: Project): string {
-  const out: string[] = [p.title, ''];
-  for (const o of p.objects) {
+/** Just the objects, as sheet text (no title) — used by the editor. */
+export function objectsText(objects: SongObject[]): string {
+  const out: string[] = [];
+  for (const o of objects) {
     if (o.type === 'label') out.push(''); // blank line before a section
     out.push(objectText(o));
   }
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
+}
+
+/** The whole arrangement as a copy-ready chord sheet (title + body). */
+export function projectText(p: Project): string {
+  return `${p.title}\n\n${objectsText(p.objects)}`;
 }

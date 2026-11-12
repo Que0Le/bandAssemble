@@ -6,6 +6,7 @@
   import Chart from './components/Chart.svelte';
   import MasterControls from './components/MasterControls.svelte';
   import ClientControls from './components/ClientControls.svelte';
+  import Editor from './components/Editor.svelte';
 
   onMount(() => session?.start());
 </script>
@@ -21,6 +22,8 @@
 
 {#if !ROLE}
   <RoleChooser />
+{:else if ROLE === 'editor'}
+  <Editor />
 {:else if session}
   <section>
     <div class="role-badge {ROLE}">{ROLE === 'master' ? '🎛️ MASTER' : '📱 CLIENT'}</div>

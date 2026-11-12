@@ -11,8 +11,9 @@ import type { Role, TransportMsg, PingMsg, PongMsg, LoopRange } from './lib/prot
 
 const params = new URLSearchParams(location.search);
 const roleParam = params.get('role');
-export const ROLE: Role | null =
-  roleParam === 'master' || roleParam === 'client' ? roleParam : null;
+export type AppRole = 'master' | 'client' | 'editor';
+export const ROLE: AppRole | null =
+  roleParam === 'master' || roleParam === 'client' || roleParam === 'editor' ? roleParam : null;
 const SESSION_ID = params.get('session') || 'spike';
 const DEVICE_ID = Math.random().toString(36).slice(2, 8);
 const CHORUS_LOOP: LoopRange = { fromSec: 24, toSec: 40 };
@@ -236,7 +237,8 @@ export class Session {
   }
 }
 
-export const session = ROLE ? new Session(ROLE) : null;
+export const session =
+  ROLE === 'master' || ROLE === 'client' ? new Session(ROLE) : null;
 
 // debug handle for cross-tab verification (dev/testing only)
 (globalThis as unknown as { __session?: Session | null }).__session = session;
