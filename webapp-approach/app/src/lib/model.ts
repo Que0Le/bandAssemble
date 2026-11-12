@@ -98,7 +98,7 @@ export const PROJECT: Project = {
   bpm: 76,
   objects: [
     label(0, 'Verse 1'),
-    line(0, 3, '[G]Đường tất nhiên còn dài', '↓ ↓↑ ↓ ↑'),
+    line(0, 3, '[G]Đường tất nhiên còn dài', '↓   ↓ ↑   ↓   ↑'),
     line(3, 6, '[D]Ai tất nhiên cũng [G]ngại'),
     line(6, 9, '[C]Nhưng sực bạn dừng [Am]chân một bước'),
     line(9, 12, '[A7]Đưa mắt ngước lên [D]chông'),

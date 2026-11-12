@@ -57,10 +57,12 @@ export function parseSheet(text: string): SongObject[] {
       continue;
     }
 
-    // strum line
+    // strum line — keep leading/internal spaces (players align strokes to the
+    // words above); only strip trailing whitespace.
     if (hasArrow(t) && STRUM_RE.test(t)) {
-      if (last) last.strum = t;
-      else objs.push({ type: 'line', id: nid(), startSec: 0, endSec: 0, strum: t });
+      const strum = raw.replace(/\s+$/, '');
+      if (last) last.strum = strum;
+      else objs.push({ type: 'line', id: nid(), startSec: 0, endSec: 0, strum });
       i++;
       continue;
     }

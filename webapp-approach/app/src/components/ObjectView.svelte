@@ -69,9 +69,10 @@
   .strum {
     font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
     font-size: 1rem;
-    letter-spacing: 0.08em;
     color: #9fe0b0;
     margin-top: 3px;
+    /* preserve the author's spaces so strokes can be aligned to the words */
+    white-space: pre;
   }
   .note {
     font-size: 0.82rem;
