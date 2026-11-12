@@ -1,12 +1,13 @@
 <script lang="ts">
   import { session } from '../session.svelte';
-  import { SONG } from '../lib/song';
+  import { PROJECT, labels } from '../lib/model';
   const s = session!;
+  const marks = labels(PROJECT);
 </script>
 
 <p class="hint">Request the band to start from a section:</p>
 <div class="markers">
-  {#each SONG.markers as m}
+  {#each marks as m}
     <button class="btn" onclick={() => s.jump(m.label)}>start @ {m.label}</button>
   {/each}
 </div>

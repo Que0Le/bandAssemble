@@ -1,29 +1,127 @@
 <script lang="ts">
   import { session } from '../session.svelte';
-  import { SONG, lineIndexAt } from '../lib/song';
+  import { PROJECT, objectIndexAt, nextStart } from '../lib/model';
+  import { parseInline } from '../lib/chords';
   const s = session!;
-  const LINE_H = 42;
-  let chartH = $state(360);
+  const objects = PROJECT.objects;
 
-  const idx = $derived(lineIndexAt(s.playhead));
+  let chartH = $state(360);
+  let els = $state<HTMLElement[]>([]);
+
+  const idx = $derived(objectIndexAt(objects, s.playhead));
+
+  // Center-lock scroll: translate so the active object's current point sits at
+  // the viewport middle. Heights vary (label / 1–3 row line / tab), so we read
+  // the active element's real offsetTop + height instead of a fixed line height.
   const y = $derived.by(() => {
     const i = idx;
-    if (i < 0) return 0;
-    const l = SONG.lines[i];
-    const nextAt = i < SONG.lines.length - 1 ? SONG.lines[i + 1].atSec : SONG.lengthSec;
-    const frac = (s.playhead - l.atSec) / Math.max(0.001, nextAt - l.atSec);
-    return (i + frac) * LINE_H;
+    const el = els[i];
+    if (i < 0 || !el) return 0;
+    const start = objects[i].startSec;
+    const end = nextStart(PROJECT, i);
+    const frac = Math.min(1, Math.max(0, (s.playhead - start) / Math.max(0.001, end - start)));
+    return el.offsetTop + frac * el.offsetHeight;
   });
 </script>
 
 <div class="chart" bind:clientHeight={chartH}>
   <div class="scroller" style:transform={`translateY(${chartH / 2 - y}px)`}>
-    {#each SONG.lines as ln, i}
-      <div class="line" class:active={i === idx}>
-        <span class="t">{ln.atSec.toFixed(0)}s</span>
-        <span class="chord">{ln.chord}</span>
-        <span class="lyric">{ln.lyric}</span>
+    {#each objects as obj, i (obj.id)}
+      <div class="obj {obj.type}" class:active={i === idx} bind:this={els[i]}>
+        {#if obj.type === 'label'}
+          <div class="label-tag">{obj.text}</div>
+        {:else if obj.type === 'tab'}
+          {#if obj.caption}<div class="note">{obj.caption}</div>{/if}
+          <pre class="tab">{obj.lines.join('\n')}</pre>
+        {:else}
+          {#if obj.text}
+            <div class="text">
+              {#each parseInline(obj.text) as seg}
+                {#if seg.chord}<span class="chord">{seg.chord}</span>{/if}<span class="word"
+                  >{seg.text}</span
+                >
+              {/each}
+            </div>
+          {/if}
+          {#if obj.strum}<div class="strum">{obj.strum}</div>{/if}
+          {#if obj.note}<div class="note">{obj.note}</div>{/if}
+        {/if}
       </div>
     {/each}
   </div>
 </div>
+
+<style>
+  .chart {
+    position: relative;
+    height: 56vh;
+    overflow: hidden;
+    border: 1px solid #2a2f3a;
+    border-radius: 10px;
+    background: #0f1218;
+    -webkit-mask-image: linear-gradient(transparent, #000 14%, #000 86%, transparent);
+    mask-image: linear-gradient(transparent, #000 14%, #000 86%, transparent);
+  }
+  .scroller {
+    position: absolute;
+    left: 0;
+    right: 0;
+    padding: 0 18px;
+    will-change: transform;
+  }
+  .obj {
+    padding: 8px 10px;
+    border-radius: 8px;
+    opacity: 0.5;
+    transition:
+      opacity 0.12s linear,
+      background 0.12s linear;
+  }
+  .obj.active {
+    opacity: 1;
+    background: #1b2330;
+  }
+  .label .label-tag {
+    display: inline-block;
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #7fd0ff;
+    border: 1px solid #28506a;
+    border-radius: 999px;
+    padding: 2px 10px;
+  }
+  .text {
+    font-size: 1.12rem;
+    line-height: 1.45;
+    color: #e8edf5;
+  }
+  .chord {
+    color: #ffcf6b;
+    font-weight: 700;
+    font-size: 0.8em;
+    vertical-align: 0.35em;
+    margin: 0 2px 0 1px;
+  }
+  .strum {
+    font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+    font-size: 1rem;
+    letter-spacing: 0.08em;
+    color: #9fe0b0;
+    margin-top: 2px;
+  }
+  .note {
+    font-size: 0.82rem;
+    font-style: italic;
+    color: #8b93a3;
+    margin-top: 2px;
+  }
+  .tab {
+    font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+    font-size: 0.86rem;
+    line-height: 1.25;
+    color: #cfd6e2;
+    margin: 2px 0 0;
+    white-space: pre;
+  }
+</style>

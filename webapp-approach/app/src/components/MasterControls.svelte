@@ -1,7 +1,8 @@
 <script lang="ts">
   import { session } from '../session.svelte';
-  import { SONG } from '../lib/song';
+  import { PROJECT, labels } from '../lib/model';
   const s = session!;
+  const marks = labels(PROJECT);
 
   async function onFile(e: Event) {
     const f = (e.target as HTMLInputElement).files?.[0];
@@ -46,7 +47,7 @@
 </div>
 <p class="hint">Markers (click to jump everyone):</p>
 <div class="markers">
-  {#each SONG.markers as m}
+  {#each marks as m}
     <button class="btn" onclick={() => s.seek(m.atSec)}>{m.label} ({m.atSec}s)</button>
   {/each}
 </div>

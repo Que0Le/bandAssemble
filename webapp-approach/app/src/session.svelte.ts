@@ -6,7 +6,7 @@
 import { WsTransport } from './lib/transport';
 import { ClockSync } from './lib/clockSync';
 import { MasterAudio } from './lib/audio';
-import { SONG } from './lib/song';
+import { PROJECT, labels } from './lib/model';
 import type { Role, TransportMsg, PingMsg, PongMsg, LoopRange } from './lib/protocol';
 
 const params = new URLSearchParams(location.search);
@@ -56,7 +56,7 @@ export class Session {
     this.role = role;
     this.transport = new WsTransport(SESSION_ID, DEVICE_ID, role);
     this.clock = new ClockSync((k, p) => this.transport.send(k, p));
-    if (role === 'master') this.audio = new MasterAudio(SONG.bpm);
+    if (role === 'master') this.audio = new MasterAudio(PROJECT.bpm ?? 100);
     this.wire();
   }
 
@@ -73,7 +73,7 @@ export class Session {
       this.transport.on('intent/pause', () => this.masterPause());
       this.transport.on('intent/seek', (p: { atSec: number }) => this.seek(p.atSec));
       this.transport.on('intent/jumpMarker', (p: { label: string }) => {
-        const m = SONG.markers.find((x) => x.label === p.label);
+        const m = labels(PROJECT).find((x) => x.label === p.label);
         if (m) this.seek(m.atSec);
       });
       this.transport.on('session/hello', () => this.broadcast());
@@ -119,7 +119,7 @@ export class Session {
         if (this.tState === 'playing' && this.loop && this.audio!.playheadSec() >= this.loop.toSec) {
           this.seek(this.loop.fromSec);
         }
-        if (this.audio!.playheadSec() >= SONG.lengthSec) this.masterPause();
+        if (this.audio!.playheadSec() >= PROJECT.lengthSec) this.masterPause();
       }, 50);
     }
 
@@ -190,7 +190,7 @@ export class Session {
   }
   seek(atSec: number) {
     if (this.role !== 'master') return;
-    this.audio!.seek(Math.max(0, Math.min(atSec, SONG.lengthSec)));
+    this.audio!.seek(Math.max(0, Math.min(atSec, PROJECT.lengthSec)));
     this.broadcast();
   }
   restart() {
