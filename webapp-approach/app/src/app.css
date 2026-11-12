@@ -61,18 +61,4 @@ h2 { font-size: 15px; margin: 0 0 10px; color: var(--muted); font-weight: 600; }
 .markers { display: flex; flex-wrap: wrap; gap: 8px; }
 .markers .btn { font-size: 13px; padding: 6px 10px; }
 
-.chart { height: 360px; overflow: hidden; position: relative; border-radius: 8px; background: #0c0f13; }
-.chart .scroller { position: absolute; left: 0; right: 0; will-change: transform; }
-.line {
-  display: flex; gap: 12px; align-items: baseline;
-  padding: 10px 14px; border-bottom: 1px solid #141a21; height: 42px;
-}
-.line .t { color: var(--muted); font-variant-numeric: tabular-nums; width: 52px; font-size: 12px; }
-.line .chord { color: var(--hot); font-weight: 700; width: 70px; }
-.line .lyric { color: var(--fg); }
-.line.active { background: #15202b; }
-.line.active .lyric { color: #fff; }
-.chart::after {
-  content: ""; position: absolute; left: 0; right: 0; top: 50%;
-  border-top: 2px solid var(--accent); opacity: 0.5; pointer-events: none;
-}
+/* The chart + line/label/tab styling now lives scoped inside Chart.svelte. */

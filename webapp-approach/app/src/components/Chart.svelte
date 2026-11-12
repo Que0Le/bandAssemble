@@ -2,6 +2,7 @@
   import { session } from '../session.svelte';
   import { PROJECT, objectIndexAt, nextStart } from '../lib/model';
   import { parseInline } from '../lib/chords';
+  import { chordSvg } from '../lib/chordDiagram';
   const s = session!;
   const objects = PROJECT.objects;
 
@@ -22,6 +23,14 @@
     const frac = Math.min(1, Math.max(0, (s.playhead - start) / Math.max(0.001, end - start)));
     return el.offsetTop + frac * el.offsetHeight;
   });
+
+  // Chord tooltip (fixed-positioned so it escapes the chart's overflow:hidden).
+  let tip = $state<{ x: number; y: number; html: string; name: string } | null>(null);
+  function showTip(e: MouseEvent, chord: string) {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    tip = { x: r.left + r.width / 2, y: r.top, name: chord, html: chordSvg(chord) ?? '' };
+  }
+  const hideTip = () => (tip = null);
 </script>
 
 <div class="chart" bind:clientHeight={chartH}>
@@ -36,11 +45,13 @@
         {:else}
           {#if obj.text}
             <div class="text">
-              {#each parseInline(obj.text) as seg}
-                {#if seg.chord}<span class="chord">{seg.chord}</span>{/if}<span class="word"
-                  >{seg.text}</span
-                >
-              {/each}
+              {#each parseInline(obj.text) as seg}{#if seg.chord}<span
+                    class="chord"
+                    role="img"
+                    aria-label={`chord ${seg.chord}`}
+                    onmouseenter={(e) => showTip(e, seg.chord!)}
+                    onmouseleave={hideTip}>[{seg.chord}]</span
+                  >{/if}<span class="word">{seg.text}</span>{/each}
             </div>
           {/if}
           {#if obj.strum}<div class="strum">{obj.strum}</div>{/if}
@@ -50,6 +61,17 @@
     {/each}
   </div>
 </div>
+
+{#if tip}
+  <div class="chord-tip" style:left={`${tip.x}px`} style:top={`${tip.y}px`}>
+    {#if tip.html}
+      <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+      {@html tip.html}
+    {:else}
+      <div class="no-diagram"><b>{tip.name}</b><span>no diagram yet</span></div>
+    {/if}
+  </div>
+{/if}
 
 <style>
   .chart {
@@ -93,22 +115,27 @@
   }
   .text {
     font-size: 1.12rem;
-    line-height: 1.45;
+    line-height: 1.5;
     color: #e8edf5;
   }
+  /* Chord: same size as the lyric, but bold + colored. Bracketed, inline. */
   .chord {
     color: #ffcf6b;
     font-weight: 700;
-    font-size: 0.8em;
-    vertical-align: 0.35em;
-    margin: 0 2px 0 1px;
+    cursor: help;
+  }
+  .chord:hover {
+    color: #ffe29a;
+  }
+  .word {
+    white-space: pre-wrap;
   }
   .strum {
     font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
     font-size: 1rem;
     letter-spacing: 0.08em;
     color: #9fe0b0;
-    margin-top: 2px;
+    margin-top: 3px;
   }
   .note {
     font-size: 0.82rem;
@@ -123,5 +150,31 @@
     color: #cfd6e2;
     margin: 2px 0 0;
     white-space: pre;
+  }
+  .chord-tip {
+    position: fixed;
+    transform: translate(-50%, calc(-100% - 10px));
+    background: #0b0e13;
+    border: 1px solid #2a3340;
+    border-radius: 10px;
+    padding: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+    z-index: 50;
+  }
+  .no-diagram {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-width: 72px;
+  }
+  .no-diagram b {
+    color: #ffcf6b;
+    font-size: 1.1rem;
+  }
+  .no-diagram span {
+    color: #8b93a3;
+    font-size: 0.72rem;
   }
 </style>
