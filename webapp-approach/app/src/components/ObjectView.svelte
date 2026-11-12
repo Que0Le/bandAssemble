@@ -49,12 +49,16 @@
     border-radius: 999px;
     padding: 2px 10px;
   }
+  /* One monospace grid for the whole line, so chords, lyrics and the strum row
+     line up character-for-character — true alignment, no proportional drift. */
   .text {
-    font-size: 1.12rem;
+    font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+    font-size: 1rem;
     line-height: 1.5;
     color: #e8edf5;
+    white-space: pre;
   }
-  /* Chord: same size as the lyric, but bold + colored. Bracketed, inline. */
+  /* Chord: same monospace cell as the lyric, but bold + colored. */
   .chord {
     color: #ffcf6b;
     font-weight: 700;
@@ -63,15 +67,13 @@
   .chord:hover {
     color: #ffe29a;
   }
-  .word {
-    white-space: pre-wrap;
-  }
   .strum {
     font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
     font-size: 1rem;
+    line-height: 1.5;
     color: #9fe0b0;
-    margin-top: 3px;
-    /* preserve the author's spaces so strokes can be aligned to the words */
+    margin-top: 2px;
+    /* preserve the author's spaces so strokes align to the words above */
     white-space: pre;
   }
   .note {

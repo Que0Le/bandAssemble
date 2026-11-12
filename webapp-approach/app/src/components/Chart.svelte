@@ -99,7 +99,8 @@
   .chart {
     position: relative;
     height: 56vh;
-    overflow: hidden;
+    overflow-x: auto; /* long monospace lines can scroll instead of clipping */
+    overflow-y: hidden;
     border: 1px solid #2a2f3a;
     border-radius: 10px;
     background: #0f1218;
@@ -109,7 +110,9 @@
   .scroller {
     position: absolute;
     left: 0;
-    right: 0;
+    right: auto;
+    min-width: 100%;
+    width: max-content;
     padding: 0 18px;
     will-change: transform;
   }
