@@ -1,19 +1,24 @@
 // Reactive session controller (Svelte 5 runes). Wires transport + clock sync +
-// master audio, runs the per-frame playhead update, and exposes $state for the UI.
-// Fine-grained reactivity: the rAF loop writes `playhead` each frame and only the
-// bound DOM updates — no VDOM diff (the reason we chose Svelte over React).
+// the Maestro's audio, runs the per-frame playhead update, and exposes $state for
+// the UI. Fine-grained reactivity: the rAF loop writes `playhead` each frame and
+// only the bound DOM updates — no VDOM diff (the reason we chose Svelte over React).
+//
+// Terminology (see ../SPEC.md §Terminology):
+//   Maestro = the one device with the audio + clock authority (was "master")
+//   Player  = any following device (was "client")
+// "Role" now means the musical part and lives in the data model, not here.
 
 import { WsTransport } from './lib/transport';
 import { ClockSync } from './lib/clockSync';
 import { MasterAudio } from './lib/audio';
 import { PROJECT, labels } from './lib/model';
-import type { Role, TransportMsg, PingMsg, PongMsg, LoopRange } from './lib/protocol';
+import type { Seat, TransportMsg, PingMsg, PongMsg, LoopRange } from './lib/protocol';
 
 const params = new URLSearchParams(location.search);
-const roleParam = params.get('role');
-export type AppRole = 'master' | 'client' | 'editor';
-export const ROLE: AppRole | null =
-  roleParam === 'master' || roleParam === 'client' || roleParam === 'editor' ? roleParam : null;
+const seatParam = params.get('seat');
+export type Mode = 'maestro' | 'player' | 'editor';
+export const SEAT: Mode | null =
+  seatParam === 'maestro' || seatParam === 'player' || seatParam === 'editor' ? seatParam : null;
 const SESSION_ID = params.get('session') || 'spike';
 const DEVICE_ID = Math.random().toString(36).slice(2, 8);
 const CHORUS_LOOP: LoopRange = { fromSec: 24, toSec: 40 };
@@ -27,7 +32,7 @@ interface Follow {
 }
 
 export class Session {
-  readonly role: Role;
+  readonly seat: Seat;
   readonly deviceId = DEVICE_ID;
   readonly sessionId = SESSION_ID;
 
@@ -46,18 +51,18 @@ export class Session {
   private clock: ClockSync;
   private audio?: MasterAudio;
 
-  // master authoritative state
+  // Maestro authoritative state
   private tState: 'playing' | 'paused' = 'paused';
   private loop: LoopRange | null = null;
 
-  // client follow state
+  // Player follow state
   private follow: Follow | null = null;
 
-  constructor(role: Role) {
-    this.role = role;
-    this.transport = new WsTransport(SESSION_ID, DEVICE_ID, role);
+  constructor(seat: Seat) {
+    this.seat = seat;
+    this.transport = new WsTransport(SESSION_ID, DEVICE_ID, seat);
     this.clock = new ClockSync((k, p) => this.transport.send(k, p));
-    if (role === 'master') this.audio = new MasterAudio(PROJECT.bpm ?? 100);
+    if (seat === 'maestro') this.audio = new MasterAudio(PROJECT.bpm ?? 100);
     this.wire();
   }
 
@@ -66,12 +71,12 @@ export class Session {
   }
 
   private wire() {
-    if (this.role === 'master') {
+    if (this.seat === 'maestro') {
       this.transport.on('clock/ping', (p: PingMsg, env) =>
         this.transport.send('clock/pong', { t1: p.t1, t2: this.now(), t3: this.now(), to: env.from }),
       );
-      this.transport.on('intent/play', () => this.masterPlay());
-      this.transport.on('intent/pause', () => this.masterPause());
+      this.transport.on('intent/play', () => this.maestroPlay());
+      this.transport.on('intent/pause', () => this.maestroPause());
       this.transport.on('intent/seek', (p: { atSec: number }) => this.seek(p.atSec));
       this.transport.on('intent/jumpMarker', (p: { label: string }) => {
         const m = labels(PROJECT).find((x) => x.label === p.label);
@@ -104,14 +109,14 @@ export class Session {
     this.transport.onStatus((s) => {
       this.conn = s;
       if (s === 'connected') {
-        this.transport.send('session/hello', { role: this.role });
-        if (this.role === 'client') this.clock.start();
-        if (this.role === 'master') this.broadcast();
+        this.transport.send('session/hello', { seat: this.seat });
+        if (this.seat === 'player') this.clock.start();
+        if (this.seat === 'maestro') this.broadcast();
       }
     });
     this.transport.connect();
 
-    if (this.role === 'master') {
+    if (this.seat === 'maestro') {
       setInterval(() => {
         if (this.tState === 'playing') this.broadcast();
       }, 1500);
@@ -120,14 +125,14 @@ export class Session {
         if (this.tState === 'playing' && this.loop && this.audio!.playheadSec() >= this.loop.toSec) {
           this.seek(this.loop.fromSec);
         }
-        if (this.audio!.playheadSec() >= PROJECT.lengthSec) this.masterPause();
+        if (this.audio!.playheadSec() >= PROJECT.lengthSec) this.maestroPause();
       }, 50);
     }
 
     // Hybrid render driver. requestAnimationFrame gives a smooth 60fps update
     // while the window is focused/visible, but browsers pause rAF in any window
     // that loses focus or is backgrounded — which froze the follower's auto-scroll
-    // the moment the master window was clicked. A watchdog interval takes over
+    // the moment the Maestro window was clicked. A watchdog interval takes over
     // whenever rAF has stalled. It detects the *actual* stall (no frame in >50ms)
     // rather than trusting document.hidden, so it also covers the unfocused-but-
     // visible case (two windows on one screen). The playhead is derived from the
@@ -147,17 +152,17 @@ export class Session {
   }
 
   private renderFrame() {
-    if (this.role === 'master') {
+    if (this.seat === 'maestro') {
       this.playhead = this.audio!.playheadSec();
       this.uiState = this.tState;
       this.rate = this.audio!.rate;
     } else {
-      this.playhead = this.clientPlayhead();
+      this.playhead = this.followPlayhead();
       this.uiState = this.follow?.state ?? 'paused';
     }
   }
 
-  private clientPlayhead(): number {
+  private followPlayhead(): number {
     const f = this.follow;
     if (!f) return 0;
     if (f.state !== 'playing') return f.atSec;
@@ -165,7 +170,7 @@ export class Session {
   }
 
   private broadcast() {
-    if (this.role !== 'master') return;
+    if (this.seat !== 'maestro') return;
     const msg: TransportMsg = {
       state: this.tState,
       atSec: this.audio!.playheadSec(),
@@ -176,21 +181,21 @@ export class Session {
     this.transport.send('state/transport', msg);
   }
 
-  // ---- master actions ----
-  masterPlay() {
-    if (this.role !== 'master') return;
+  // ---- Maestro actions ----
+  maestroPlay() {
+    if (this.seat !== 'maestro') return;
     this.audio!.start(this.audio!.playheadSec());
     this.tState = 'playing';
     this.broadcast();
   }
-  masterPause() {
-    if (this.role !== 'master') return;
+  maestroPause() {
+    if (this.seat !== 'maestro') return;
     this.audio!.stop();
     this.tState = 'paused';
     this.broadcast();
   }
   seek(atSec: number) {
-    if (this.role !== 'master') return;
+    if (this.seat !== 'maestro') return;
     this.audio!.seek(Math.max(0, Math.min(atSec, PROJECT.lengthSec)));
     this.broadcast();
   }
@@ -198,13 +203,13 @@ export class Session {
     this.seek(0);
   }
   setRate(rate: number) {
-    if (this.role !== 'master') return;
+    if (this.seat !== 'maestro') return;
     this.audio!.setRate(rate);
     this.rate = rate;
     this.broadcast();
   }
   toggleLoop(on: boolean) {
-    if (this.role !== 'master') return;
+    if (this.seat !== 'maestro') return;
     this.loop = on ? CHORUS_LOOP : null;
     this.loopOn = on;
     this.broadcast();
@@ -219,13 +224,13 @@ export class Session {
 
   // ---- live compute (debug/testing; independent of the rAF loop) ----
   livePlayhead(): number {
-    return this.role === 'master' ? this.audio!.playheadSec() : this.clientPlayhead();
+    return this.seat === 'maestro' ? this.audio!.playheadSec() : this.followPlayhead();
   }
   liveState(): 'playing' | 'paused' {
-    return this.role === 'master' ? this.tState : (this.follow?.state ?? 'paused');
+    return this.seat === 'maestro' ? this.tState : (this.follow?.state ?? 'paused');
   }
 
-  // ---- client actions (intents) ----
+  // ---- Player actions (intents to the Maestro) ----
   askPlay() {
     this.transport.send('intent/play', {});
   }
@@ -238,7 +243,7 @@ export class Session {
 }
 
 export const session =
-  ROLE === 'master' || ROLE === 'client' ? new Session(ROLE) : null;
+  SEAT === 'maestro' || SEAT === 'player' ? new Session(SEAT) : null;
 
 // debug handle for cross-tab verification (dev/testing only)
 (globalThis as unknown as { __session?: Session | null }).__session = session;

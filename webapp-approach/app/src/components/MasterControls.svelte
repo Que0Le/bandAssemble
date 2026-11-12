@@ -11,8 +11,8 @@
 </script>
 
 <div class="row">
-  <button class="btn" onclick={() => s.masterPlay()}>▶ Play</button>
-  <button class="btn" onclick={() => s.masterPause()}>⏸ Pause</button>
+  <button class="btn" onclick={() => s.maestroPlay()}>▶ Play</button>
+  <button class="btn" onclick={() => s.maestroPause()}>⏸ Pause</button>
   <button class="btn" onclick={() => s.restart()}>⏮ Restart</button>
 </div>
 <div class="row">

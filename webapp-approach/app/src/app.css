@@ -44,8 +44,8 @@ section { padding: 16px; max-width: 1100px; margin: 0 auto; }
   display: inline-block; font-weight: 650; padding: 4px 10px;
   border-radius: 8px; margin-bottom: 12px;
 }
-.role-badge.master { background: #2d3a2f; color: var(--play); }
-.role-badge.client { background: #2d3140; color: var(--accent); }
+.role-badge.maestro { background: #2d3a2f; color: var(--play); }
+.role-badge.player { background: #2d3140; color: var(--accent); }
 
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }

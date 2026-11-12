@@ -19,6 +19,11 @@ optional **note**. Everything but the timing is optional, so the *same* shape co
 every case. Two specials round it out: a `label` (a section/jump marker) and a `tab`
 block (multi-line notation text can't express).
 
+One such array is a **Chart** — the notation for a single **Role**. A **Project**
+bundles a shared **Base** (the audio reference + timed lyrics) with **one Chart per
+Role**. Every device holds all Charts (they're tiny text); only the **Maestro** holds
+the audio file (see [`../SPEC.md`](../SPEC.md) §Terminology).
+
 ```
    [Em]So close no matter how [D]far      ← text  (chords embedded)
    ↓  ↓↑ ↓↑↓                               ← strum (shown below)
@@ -29,22 +34,37 @@ TypeScript as the source of truth:
 
 ```ts
 // ---- Top level ----
+// A Project = a shared Base (audio + timed lyrics) + one Chart per Role. Charts
+// are tiny text and replicate to EVERY device; the audio file stays on the
+// Maestro. See ../SPEC.md §Terminology (Maestro / Player / Base / Chart).
 interface Project {
-  schemaVersion: 2;          // 2 = flat object model (was: layered notes)
+  schemaVersion: 3;          // 3 = Base + per-Role Charts (was: single object array)
   id: string;                // uuid
   title: string;
   createdAt: string;         // ISO
   updatedAt: string;
-  audio: AudioRef;
+  base: Base;                // the Maestro-authored skeleton everyone clones from
+  roles: Role[];             // the musical parts
+  charts: Record<string, Chart>;  // roleId -> that Role's Chart
+}
+
+// The shared skeleton. A Role's Chart starts as a clone of `base.lyrics`.
+interface Base {
+  audio: AudioRef;           // reference only — the file lives on the Maestro
   lengthSec: number;         // master audio length; all positions are seconds into it
-  objects: SongObject[];     // THE arrangement — one flat array, kept sorted by startSec
-  roles?: Role[];            // optional; see "Per-role views" below
+  lyrics: SongObject[];      // timed lyric lines (+ labels): the clonable skeleton
   tempo?: TempoMap;          // optional, future — a bar grid for %/time-sig (see §Strum)
+}
+
+// One Role's notation: a flat, ordered array of timed objects.
+interface Chart {
+  roleId: string;
+  objects: SongObject[];     // kept sorted by startSec
 }
 
 // ---- Audio ----
 interface AudioRef {
-  // The master device holds the actual file; followers do NOT need it.
+  // The Maestro holds the actual file; Players do NOT need it.
   fileName: string;
   durationSec: number;
   sampleRate?: number;
@@ -61,7 +81,6 @@ interface ObjBase {
   id: string;                // uuid
   startSec: number;
   endSec: number;            // for `label`, endSec is ignored (a label is a point)
-  roles?: string[];          // optional: role ids that see this object (omit = everyone)
 }
 
 // The workhorse — one displayed line-block. All of text/strum/note are optional:
@@ -93,12 +112,15 @@ interface TabObject extends ObjBase {
 
 type SongObject = LineObject | LabelObject | TabObject;
 
-// ---- Per-role views (optional) -------------------------------------------
+// ---- Roles ---------------------------------------------------------------
+// Free-form parts; `kind` is only a hint for default notation. A band may have
+// several of a kind (vocal1, vocal2) or split one instrument (guitar-strum,
+// guitar-solo). Each Role has exactly one Chart in `Project.charts`.
 type InstrumentKind = 'vocals' | 'guitar' | 'bass' | 'keys' | 'drums' | 'other';
 interface Role {
-  id: string;
-  kind: InstrumentKind;
-  label: string;             // "Lead vocal", "Rhythm guitar"
+  id: string;                // "vocal1", "guitar-strum", "bass"…
+  kind: InstrumentKind;      // hint for default notation
+  label: string;             // "Vocal 1", "Guitar (strum)"
 }
 
 // ---- Tempo (optional, future) --------------------------------------------
@@ -169,18 +191,27 @@ perfect round-trip, and a viewer that works anywhere a monospace font does.
   The content inside each element is Unicode text; the *current-line emphasis, scroll,
   and tap-to-jump* are UI concerns layered on top with CSS — never baked into the text.
 
-## Per-role views
+## Roles, Charts, and the Base
 
-V1 can show one shared arrangement to everyone. When roles matter (guitarist wants strum,
-singer wants clean lyrics), tag an object with `roles: [...]` and a role's view filters to
-objects that include it (or have no tag). This stays optional and additive — no separate
-per-role copies of the song.
+Each **Role** owns a separate **Chart** (its own object array). A device shows the Chart
+for whichever Role it's currently on, and anyone can switch Roles freely. The Charts are
+small text, so **every device holds all of them** — switching Role is instant, nothing to
+fetch.
 
-## Sync lookup (unchanged)
+A new Role's Chart starts as a **clone of `base.lyrics`** (the Maestro's lyric + timing
+skeleton); the Player then layers that part's chords / strum / solo on top.
 
-The playhead finds the object where `startSec ≤ now < endSec` and highlights / scrolls to
-it — the same `lineIndexAt(head)` the spike already does. Keeping `objects` sorted by
-`startSec` makes this a cheap binary search.
+**Editing & Hand off.** Edits are a **local draft** on the editing device — nobody else is
+affected. When ready, the Player **hands the draft off** to the Maestro, which distributes
+it so every device's copy of that Role's Chart updates. **Last hand-off wins** (no
+locking; all friends). The Maestro is the single distribution point, matching the star
+topology (Players only talk to the Maestro).
+
+## Sync lookup
+
+The playhead finds the object in the **current Role's Chart** where
+`startSec ≤ now < endSec` and highlights / scrolls to it. Keeping each Chart's `objects`
+sorted by `startSec` makes this a cheap lookup.
 
 ## Sharing boundary (see `../SPEC.md` §Licensing)
 

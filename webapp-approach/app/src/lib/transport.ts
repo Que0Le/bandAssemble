@@ -1,7 +1,7 @@
 // Pluggable transport. WsTransport is the MVP impl; a future RtcTransport
 // (WebRTC-over-LAN) would implement the same interface (see ../../02-architecture.md).
 
-import type { Envelope, Role } from './protocol';
+import type { Envelope, Seat } from './protocol';
 
 export type StatusHandler = (status: 'connecting' | 'connected' | 'disconnected') => void;
 type AnyHandler = (payload: unknown, env: Envelope) => void;
@@ -31,7 +31,7 @@ export class WsTransport implements Transport {
   constructor(
     private sessionId: string,
     private deviceId: string,
-    private role: Role,
+    private seat: Seat,
   ) {}
 
   connect(): void {
@@ -60,7 +60,7 @@ export class WsTransport implements Transport {
       v: 1,
       sessionId: this.sessionId,
       from: this.deviceId,
-      role: this.role,
+      seat: this.seat,
       kind,
       ts: performance.now(),
       payload,

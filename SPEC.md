@@ -1,6 +1,6 @@
 # bandAssemble — Project Description & Roadmap
 
-_Last updated: 2026-11-11 · Status: design / discussion (no code yet)_
+_Last updated: 2026-11-12 · Status: prototyping — Svelte web app under [`webapp-approach/`](webapp-approach/)_
 
 ## 1. Vision
 
@@ -22,6 +22,28 @@ bandAssemble turns those devices into a **synchronized, role-aware performance a
 and the editor doubles as the band's **arrangement documentation** — revisitable
 months later.
 
+## Terminology (glossary)
+
+_The vocabulary the app and code use. This supersedes looser "master / role / mode"
+wording elsewhere in this doc._
+
+- **Session** — one live shared performance everyone joins (by code / QR).
+- **Maestro** — the single device that holds and plays the master **audio**, drives the
+  shared clock, authors the **Base**, and **distributes** Charts to the band.
+  Transferable at runtime — anyone can take the seat (no security; all friends).
+- **Player** — any other device. Performs a **Role** and can edit locally.
+- **Role** — the musical part a device shows: vocal1, vocal2, bass, guitar-strum,
+  guitar-solo, drum… Anyone can switch to any Role freely.
+- **Chart** — the notation for one Role: a flat array of timed objects (line / label /
+  tab). **One Chart per Role.** Every device holds a full copy of **every** Chart
+  (they're tiny text); only the Maestro holds the audio file.
+- **Base** — the Maestro-authored skeleton: lyrics + timestamps (+ the audio reference).
+  A Role's Chart starts by **cloning** the Base, then gets its own chords / strum / solo.
+- **Edit** — a toggle on any device; changes are a **local draft** (work-in-progress)
+  that affects nobody until…
+- **Hand off** — …the Player hands the draft up to the Maestro, who distributes it so
+  everyone's copy of that Role's Chart updates. **Last hand-off wins** (no locking).
+
 ## 2. Core principles / decisions
 
 These are settled design decisions, not open questions:
@@ -38,9 +60,10 @@ These are settled design decisions, not open questions:
 4. **The timeline is anchored to the master audio** (seconds into the file), used
    **as-is** in V1 (no cutting / inserting sections yet). Markers, lyrics, chords,
    and notes all hang off this one timeline.
-5. **Role split by device class:**
-   - **Laptop = editing / authoring / documentation.**
-   - **Handheld (phone/tablet) = consuming / playing / practicing.** No editing.
+5. **Any device can edit, but device class guides the work.** Editing is a **toggle**
+   available to any Player on their current Role's Chart (local draft → Hand off), not
+   a locked-down mode. In practice the **laptop (Maestro)** does the heavy authoring and
+   audio; **handhelds** mostly consume and make light edits.
 6. **Transport:** start with **local Wi-Fi** (one host broadcasts, others follow).
    **Bluetooth / no-infrastructure** is a later goal (harder cross-platform).
 7. **Tech stack:** **Flutter** for cross-platform UI and the consume side.
@@ -59,25 +82,29 @@ These are settled design decisions, not open questions:
   (Practice is just "play the region between two markers," so it reuses the same
   machinery.)
 
-## 4. Data model (first cut)
+## 4. Data model
 
-A **project** (the band's reusable arrangement / documentation) contains:
+The realized TypeScript types live in
+[`webapp-approach/03-data-model.md`](webapp-approach/03-data-model.md); this is the
+shape in words. A **Project** (the band's reusable arrangement / documentation) holds:
 
-- **Master audio** reference (the original recording, used as-is in V1).
-- **Timeline** anchored to audio seconds.
-- **Markers** — named, reusable positions (Intro, Verse 1, Solo, Bridge…). Double as
-  jump points **and** loop/practice bounds.
-- **Lyrics** — imported from LRC, timestamped to audio seconds.
-- **Per-role note layers** — each note is pinned to a timeline position and is one of:
-  - chord symbol (C, Am7, G/B…)
-  - strumming pattern (small per-bar beat grid with ↓/↑ strokes, rests, accents)
-  - free text / cue
-  - image (photo of existing tab/sheet — the escape hatch for any notation)
-- **Roles:** vocalist (lyrics + text), guitarist (chords + strumming + occasional
-  solo-as-image), pianist (chords), drummer, bassist, etc.
+- **Base** — the shared skeleton, authored by the **Maestro**:
+  - **Master audio** reference — the original recording, used as-is in V1. The file
+    itself lives **only on the Maestro** and never crosses the wire.
+  - **Lyrics + timestamps** — the timed skeleton (LRC import or tap-to-time), in audio
+    seconds.
+- **Roles** — the musical parts (vocal1, bass, guitar-strum, guitar-solo, drum…).
+- **Charts** — **one per Role**, each a flat, ordered array of **timed objects**:
+  - **line** — a lyric line with inline `[chords]`, an optional **strum** row, and an
+    optional note. Rendered on one monospace grid so strokes align to the words.
+  - **label** — a section / jump point (Intro, Chorus…); doubles as a marker.
+  - **tab** — a GuitarPro/TuxGuitar-style block for solos.
+  - Every object carries `startSec` / `endSec` into the master audio.
 
-Position is always "seconds into the (as-is) audio," which keeps LRC timestamps valid
-forever since the audio isn't edited in V1.
+Position is always "seconds into the (as-is) audio," so imported timestamps stay valid
+forever (the audio isn't edited in V1). **Charts are small text and are replicated to
+every device; the audio is large and stays on the Maestro.** A Role's Chart begins as a
+**clone of the Base**, then diverges with that part's own annotations.
 
 ## 5. Notation staging
 

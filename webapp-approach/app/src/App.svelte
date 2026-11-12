@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { session, ROLE } from './session.svelte';
+  import { session, SEAT } from './session.svelte';
   import RoleChooser from './components/RoleChooser.svelte';
   import TransportPanel from './components/TransportPanel.svelte';
   import Chart from './components/Chart.svelte';
@@ -20,25 +20,25 @@
   {/if}
 </header>
 
-{#if !ROLE}
+{#if !SEAT}
   <RoleChooser />
-{:else if ROLE === 'editor'}
+{:else if SEAT === 'editor'}
   <Editor />
 {:else if session}
   <section>
-    <div class="role-badge {ROLE}">{ROLE === 'master' ? '🎛️ MASTER' : '📱 CLIENT'}</div>
+    <div class="role-badge {SEAT}">{SEAT === 'maestro' ? '🎛️ MAESTRO' : '📱 PLAYER'}</div>
     <div class="grid">
       <div class="panel">
         <h2>Transport</h2>
         <TransportPanel />
-        {#if ROLE === 'master'}
+        {#if SEAT === 'maestro'}
           <MasterControls />
         {:else}
           <ClientControls />
         {/if}
       </div>
       <div class="panel">
-        <h2>{ROLE === 'client' ? 'Your chart (follows master)' : 'Chart'}</h2>
+        <h2>{SEAT === 'player' ? 'Your chart (follows Maestro)' : 'Chart'}</h2>
         <Chart />
       </div>
     </div>

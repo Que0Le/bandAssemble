@@ -1,12 +1,14 @@
 // Wire protocol shared by master and client (see ../../04-sync-and-signaling.md).
 
-export type Role = 'master' | 'client';
+// The device's job in a session. Maestro = holds audio + clock authority;
+// Player = follows. (Not to be confused with a musical "Role".)
+export type Seat = 'maestro' | 'player';
 
 export interface Envelope<T = unknown> {
   v: 1;
   sessionId: string;
   from: string;
-  role: Role;
+  seat: Seat;
   kind: string;
   ts: number;
   payload: T;
