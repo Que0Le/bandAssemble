@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>bandAssemble — sync spike</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>bandAssemble <span class="tag">sync spike</span></h1>
+    <div id="conn" class="pill">connecting…</div>
+  </header>
+
+  <!-- Role chooser (shown only when ?role= is absent) -->
+  <section id="chooser" hidden>
+    <p>Open this page as:</p>
+    <a class="btn big" href="?role=master">🎛️ Master (laptop / audio)</a>
+    <a class="btn big" href="?role=client">📱 Client (player view)</a>
+    <p class="hint">Tip: open one of each in two windows side by side.</p>
+  </section>
+
+  <!-- Shared transport/status readout -->
+  <section id="app" hidden>
+    <div class="role-badge" id="roleBadge"></div>
+
+    <div class="grid">
+      <div class="panel">
+        <h2>Transport</h2>
+        <div class="readout">
+          <div><span>state</span><b id="rState">—</b></div>
+          <div><span>playhead</span><b id="rPlayhead">0.00s</b></div>
+          <div><span>rate</span><b id="rRate">1.00×</b></div>
+          <div><span>clock offset</span><b id="rOffset">—</b></div>
+          <div><span>best RTT</span><b id="rRtt">—</b></div>
+          <div><span>last sync</span><b id="rSync">—</b></div>
+        </div>
+
+        <!-- Master-only controls -->
+        <div id="masterControls" hidden>
+          <div class="row">
+            <button id="btnPlay" class="btn">▶ Play</button>
+            <button id="btnPause" class="btn">⏸ Pause</button>
+            <button id="btnRestart" class="btn">⏮ Restart</button>
+          </div>
+          <div class="row">
+            <label>rate
+              <input id="rate" type="range" min="0.5" max="1" step="0.05" value="1" />
+            </label>
+            <label><input id="loopChk" type="checkbox" /> loop section</label>
+          </div>
+          <div class="row">
+            <label><input id="metChk" type="checkbox" checked /> metronome click</label>
+            <label>load audio <input id="audioFile" type="file" accept="audio/*" /></label>
+          </div>
+          <p class="hint">Markers (click to jump everyone):</p>
+          <div id="masterMarkers" class="markers"></div>
+        </div>
+
+        <!-- Client-only controls -->
+        <div id="clientControls" hidden>
+          <p class="hint">Request the band to start from a section:</p>
+          <div id="clientMarkers" class="markers"></div>
+          <div class="row">
+            <button id="cPlay" class="btn">▶ Ask to play</button>
+            <button id="cPause" class="btn">⏸ Ask to pause</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2 id="chartTitle">Chart</h2>
+        <div id="chart" class="chart"></div>
+      </div>
+    </div>
+  </section>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

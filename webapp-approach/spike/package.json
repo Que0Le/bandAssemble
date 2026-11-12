@@ -1,0 +1,13 @@
+{
+  "name": "bandassemble-spike",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Tech-proof spike: localhost relay + authoritative-master sync loop for bandAssemble",
+  "type": "module",
+  "scripts": {
+    "start": "node relay.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
