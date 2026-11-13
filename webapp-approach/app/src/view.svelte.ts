@@ -102,9 +102,21 @@ export function addRole(label: string): string {
   return id;
 }
 
-/** Fill an empty Role's chart with a clone of the Base lyrics (the skeleton). */
-export function cloneBaseInto(roleId: string): void {
-  charts[roleId] = cloneObjects(meta.base.lyrics);
+/** Sources a Role's chart can be cloned from: the Base, plus any other Role that
+ *  already has content (future: pick between variants). Excludes the target. */
+export function cloneSources(targetRoleId: string): Array<{ key: string; label: string }> {
+  const out = [{ key: 'base', label: 'Base lyrics' }];
+  for (const r of roles) {
+    if (r.id !== targetRoleId && (charts[r.id]?.length ?? 0) > 0) out.push({ key: r.id, label: r.label });
+  }
+  return out;
+}
+
+/** Clone ALL objects (chords, strum, tab, notes — everything but the audio, which
+ *  charts never hold) from a source into a Role's chart. Source is 'base' or a Role id. */
+export function cloneInto(targetRoleId: string, sourceKey: string): void {
+  const src = sourceKey === 'base' ? meta.base.lyrics : (charts[sourceKey] ?? []);
+  charts[targetRoleId] = cloneObjects(src);
   save();
 }
 

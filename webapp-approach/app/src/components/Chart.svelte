@@ -1,7 +1,7 @@
 <script lang="ts">
   import { session } from '../session.svelte';
   import { objectIndexAt, nextStart } from '../lib/model';
-  import { view, currentObjects, roles, addRole, cloneBaseInto, meta } from '../view.svelte';
+  import { view, currentObjects, roles, addRole, cloneInto, cloneSources, meta } from '../view.svelte';
   import { chordSvg } from '../lib/chordDiagram';
   import { sheet } from '../lib/serialize';
   import { copyText } from '../lib/clipboard';
@@ -18,7 +18,6 @@
     view.editing = false;
     view.roleId = id;
   }
-  const cloneBase = () => cloneBaseInto(view.roleId);
 
   let chartH = $state(360);
   let els = $state<HTMLElement[]>([]);
@@ -44,9 +43,12 @@
     chartEl.scrollTop = el.offsetTop + frac * el.offsetHeight - h / 2;
   });
 
-  // Click a line/label to jump the whole band there (unless selecting text).
-  function jumpTo(obj: { startSec: number }) {
-    if (!window.getSelection()?.isCollapsed) return;
+  // Double-click a line/label to jump the whole band there. (Single-click and
+  // click-drag stay free for selecting text.) preventDefault + clearing the
+  // selection stops the double-click from leaving a highlighted word behind.
+  function jumpTo(e: MouseEvent, obj: { startSec: number }) {
+    e.preventDefault();
+    window.getSelection()?.removeAllRanges();
     if (s.seat === 'maestro') s.seek(obj.startSec);
     else s.askSeek(obj.startSec);
   }
@@ -100,8 +102,12 @@
   <ChartEdit />
 {:else if objects.length === 0}
   <div class="empty">
-    <p>No chart for <b>{roleLabel}</b> yet.</p>
-    <button class="clone-btn" onclick={cloneBase}>⎘ Clone lyrics from Base</button>
+    <p>No chart for <b>{roleLabel}</b> yet. Start it from:</p>
+    <div class="clone-row">
+      {#each cloneSources(view.roleId) as src}
+        <button class="clone-btn" onclick={() => cloneInto(view.roleId, src.key)}>⎘ {src.label}</button>
+      {/each}
+    </div>
     <p class="sub">Then press ✎ Edit to add this part's chords / strum, and Hand off to share.</p>
   </div>
 {:else}
@@ -124,7 +130,7 @@
           role="button"
           tabindex="-1"
           bind:this={els[i]}
-          onclick={() => jumpTo(obj)}
+          ondblclick={(e) => jumpTo(e, obj)}
         >
           <ObjectView {obj} onChordEnter={showTip} onChordLeave={hideTip} />
         </div>
@@ -201,6 +207,12 @@
     font-size: 0.82rem;
     margin: 0;
     max-width: 320px;
+  }
+  .clone-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
   }
   .clone-btn {
     cursor: pointer;
