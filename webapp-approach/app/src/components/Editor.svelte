@@ -1,7 +1,7 @@
 <script lang="ts">
   import { PROJECT, objectIndexAt } from '../lib/model';
   import type { SongObject } from '../lib/model';
-  import { roles, charts } from '../view.svelte';
+  import { roles, charts, resetProject } from '../view.svelte';
   import { parseSheet, autoTime } from '../lib/parseSheet';
   import { objectsText } from '../lib/serialize';
   import { copyText } from '../lib/clipboard';
@@ -122,6 +122,9 @@
     <div class="spacer"></div>
     <button class="btn" onclick={copySheet}>⧉ Copy sheet</button>
     <button class="btn" onclick={copyJson}>⧉ Copy JSON</button>
+    <button class="btn" onclick={resetProject} title="Discard saved changes, reload the sample"
+      >↺ Reset</button
+    >
     {#if copied}<span class="flash">{copied}</span>{/if}
   </div>
 
