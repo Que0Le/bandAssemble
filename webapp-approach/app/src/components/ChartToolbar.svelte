@@ -44,7 +44,7 @@
     <button class="btn" onclick={copySheet}>{copied ? '✓ Copied' : '⧉ Copy sheet'}</button>
   {/if}
   <button class="btn" onclick={() => (view.editing = !view.editing)}>
-    {view.editing ? '✕ Close' : '✎ Edit'}
+    {view.editing ? '✕ Close' : '✎ Quick edit'}
   </button>
 </div>
 

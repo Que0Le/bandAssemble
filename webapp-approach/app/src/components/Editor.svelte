@@ -1,7 +1,16 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import { objectIndexAt } from '../lib/model';
   import type { SongObject } from '../lib/model';
-  import { roles, charts, resetProject, meta, saveProjectFile, openProjectFile } from '../view.svelte';
+  import {
+    roles,
+    charts,
+    resetProject,
+    meta,
+    saveProjectFile,
+    openProjectFile,
+    setChart,
+  } from '../view.svelte';
   import { parseSheet, autoTime } from '../lib/parseSheet';
   import { objectsText } from '../lib/serialize';
   import { copyText } from '../lib/clipboard';
@@ -9,9 +18,14 @@
 
   const r2 = (n: number) => Math.round(n * 100) / 100;
 
-  const firstRole = roles[0].id;
-  const initialSheet = objectsText(charts[firstRole] ?? []);
-  let roleId = $state(firstRole);
+  // Open on the Role passed from the chart's "Full editor…" button (?role=…),
+  // falling back to the first Role. Guard an empty roles list.
+  const params = new URLSearchParams(location.search);
+  const firstRole = roles[0]?.id ?? '';
+  const wanted = params.get('role');
+  const startRole = wanted && roles.some((r) => r.id === wanted) ? wanted : firstRole;
+  const initialSheet = objectsText(charts[startRole] ?? []);
+  let roleId = $state(startRole);
   let title = $state(meta.title);
 
   async function onOpen(e: Event) {
@@ -115,12 +129,33 @@
     const ok = await copyText(JSON.stringify({ title, roleId, objects }, null, 2));
     note(ok ? 'chart JSON copied' : 'copy failed');
   }
+
+  // Commit the edited objects into the project store (+ localStorage) — the single
+  // source of truth the chart viewer and Save file both read. Without this, the
+  // tap-to-time work here never leaves the Editor (the old Save-file trap).
+  function saveToProject() {
+    setChart(roleId, objects);
+    note('saved ' + roleId + ' to project');
+  }
+  function saveFile() {
+    setChart(roleId, objects); // the download must reflect these edits
+    saveProjectFile();
+  }
+  function goBack() {
+    if (history.length > 1) history.back();
+    else location.href = location.pathname; // no history → role chooser
+  }
+
+  onDestroy(() => {
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+  });
 </script>
 
 <svelte:window onkeydown={onKey} />
 
 <section class="editor">
   <div class="ed-head">
+    <button class="btn" onclick={goBack} title="Back to the band view">← Back</button>
     <input class="title-in" bind:value={title} aria-label="song title" />
     <label class="role-sel"
       >Role
@@ -130,8 +165,13 @@
     </label>
     <button class="btn" onclick={loadRole}>Load role</button>
     <div class="spacer"></div>
+    <button
+      class="btn save"
+      onclick={saveToProject}
+      title="Write these edits into the project (and this browser)">✓ Save to project</button
+    >
     <button class="btn" onclick={copySheet}>⧉ Copy sheet</button>
-    <button class="btn" onclick={saveProjectFile} title="Download the whole project as a file"
+    <button class="btn" onclick={saveFile} title="Download the whole project as a file (includes these edits)"
       >⤓ Save file</button
     >
     <label class="btn open-lbl" title="Open a project file (replaces the current one)"
@@ -316,7 +356,8 @@
     font-variant-numeric: tabular-nums;
     min-width: 64px;
   }
-  .btn.tap {
+  .btn.tap,
+  .btn.save {
     background: #1b3326;
     border-color: #2f6b45;
     color: #bdf0cf;

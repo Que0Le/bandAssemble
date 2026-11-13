@@ -4,7 +4,7 @@
   // to the Maestro to distribute. Timing is preserved from the existing chart
   // (the text format carries no times).
   import { session } from '../session.svelte';
-  import { view, charts } from '../view.svelte';
+  import { view, charts, setChart } from '../view.svelte';
   import { objectsText } from '../lib/serialize';
   import { parseSheet, reTime } from '../lib/parseSheet';
 
@@ -17,6 +17,13 @@
     s.handOff(roleId, objs);
     view.editing = false;
   }
+
+  // Need more than text? Keep the in-progress draft (commit it to this Role locally —
+  // not a band hand-off), then open the full editor page for timing / tap-to-time.
+  function openFull() {
+    setChart(roleId, reTime(parseSheet(draft), charts[roleId] ?? []));
+    location.href = `${location.pathname}?seat=editor&role=${encodeURIComponent(roleId)}`;
+  }
 </script>
 
 <div class="edit">
@@ -27,6 +34,10 @@
   <textarea class="draft" bind:value={draft} spellcheck="false"></textarea>
   <div class="actions">
     <button class="btn primary" onclick={handOff}>⤴ Hand off to band</button>
+    <button class="btn" onclick={openFull} title="Open the full editor: timing, tap-to-time, audio"
+      >⤢ Full editor…</button
+    >
+    <span class="gap"></span>
     <button class="btn" onclick={() => (view.editing = false)}>Cancel</button>
   </div>
 </div>
@@ -58,6 +69,10 @@
   .actions {
     display: flex;
     gap: 8px;
+    align-items: center;
+  }
+  .gap {
+    flex: 1;
   }
   .btn {
     cursor: pointer;
