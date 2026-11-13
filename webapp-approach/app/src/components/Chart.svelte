@@ -1,7 +1,7 @@
 <script lang="ts">
   import { session } from '../session.svelte';
-  import { PROJECT, objectIndexAt, nextStart } from '../lib/model';
-  import { view, currentObjects, roles, addRole, cloneBaseInto } from '../view.svelte';
+  import { objectIndexAt, nextStart } from '../lib/model';
+  import { view, currentObjects, roles, addRole, cloneBaseInto, meta } from '../view.svelte';
   import { chordSvg } from '../lib/chordDiagram';
   import { sheet } from '../lib/serialize';
   import { copyText } from '../lib/clipboard';
@@ -39,7 +39,7 @@
     const el = els[idx];
     if (!chartEl || idx < 0 || !el) return;
     const start = objects[idx].startSec;
-    const end = nextStart(objects, idx, PROJECT.base.lengthSec);
+    const end = nextStart(objects, idx, meta.base.lengthSec);
     const frac = Math.min(1, Math.max(0, (ph - start) / Math.max(0.001, end - start)));
     chartEl.scrollTop = el.offsetTop + frac * el.offsetHeight - h / 2;
   });
@@ -63,7 +63,7 @@
   let copied = $state(false);
   let copyTimer: ReturnType<typeof setTimeout> | undefined;
   async function copySheet() {
-    const ok = await copyText(sheet(PROJECT.title, objects));
+    const ok = await copyText(sheet(meta.title, objects));
     copied = ok;
     clearTimeout(copyTimer);
     copyTimer = setTimeout(() => (copied = false), 1600);

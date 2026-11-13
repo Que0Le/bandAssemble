@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { PROJECT, objectIndexAt } from '../lib/model';
+  import { objectIndexAt } from '../lib/model';
   import type { SongObject } from '../lib/model';
-  import { roles, charts, resetProject } from '../view.svelte';
+  import { roles, charts, resetProject, meta, saveProjectFile, openProjectFile } from '../view.svelte';
   import { parseSheet, autoTime } from '../lib/parseSheet';
   import { objectsText } from '../lib/serialize';
   import { copyText } from '../lib/clipboard';
@@ -12,7 +12,17 @@
   const firstRole = roles[0].id;
   const initialSheet = objectsText(charts[firstRole] ?? []);
   let roleId = $state(firstRole);
-  let title = $state(PROJECT.title);
+  let title = $state(meta.title);
+
+  async function onOpen(e: Event) {
+    const f = (e.target as HTMLInputElement).files?.[0];
+    if (!f) return;
+    try {
+      await openProjectFile(f); // validates, persists, reloads
+    } catch (err) {
+      note((err as Error).message);
+    }
+  }
   let sheet = $state(initialSheet);
   let objects = $state<SongObject[]>(autoTime(parseSheet(initialSheet)));
 
@@ -121,6 +131,12 @@
     <button class="btn" onclick={loadRole}>Load role</button>
     <div class="spacer"></div>
     <button class="btn" onclick={copySheet}>⧉ Copy sheet</button>
+    <button class="btn" onclick={saveProjectFile} title="Download the whole project as a file"
+      >⤓ Save file</button
+    >
+    <label class="btn open-lbl" title="Open a project file (replaces the current one)"
+      >⤒ Open file<input type="file" accept="application/json,.json" onchange={onOpen} /></label
+    >
     <button class="btn" onclick={copyJson}>⧉ Copy JSON</button>
     <button class="btn" onclick={resetProject} title="Discard saved changes, reload the sample"
       >↺ Reset</button
@@ -259,6 +275,12 @@
     border: 1px solid #2a3340;
     border-radius: 8px;
     padding: 5px 8px;
+  }
+  .open-lbl {
+    cursor: pointer;
+  }
+  .open-lbl input {
+    display: none;
   }
   .ed-grid {
     display: grid;

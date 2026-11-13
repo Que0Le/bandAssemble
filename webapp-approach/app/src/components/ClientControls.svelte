@@ -1,8 +1,9 @@
 <script lang="ts">
   import { session } from '../session.svelte';
-  import { PROJECT, labels } from '../lib/model';
+  import { labels } from '../lib/model';
+  import { meta } from '../view.svelte';
   const s = session!;
-  const marks = labels(PROJECT.base.lyrics);
+  const marks = labels(meta.base.lyrics);
 </script>
 
 <p class="hint">Request the band to start from a section:</p>

@@ -1,63 +1,77 @@
-// Device-local view state: which Role is shown, whether we're editing, the list
-// of Roles, and the reactive per-Role chart objects. Chart updates — from a local
-// edit/clone or the Maestro's distribution — replace an entry in `charts`, which
-// re-renders. A Role with no chart yet is "empty" until cloned from the Base.
-//
-// Persistence: roles + charts are auto-saved to localStorage on every change and
-// restored on load, so a reload doesn't wipe edits/added Roles. It's per-device;
-// when connected, the Maestro's distribution still reconciles everyone. The Base
-// (audio skeleton) stays the pristine PROJECT so clones start clean.
+// Device-local view state + the live arrangement (meta + roles + charts), kept
+// reactive so edits, clones, distribution and Open all re-render. Everything is
+// auto-saved to localStorage as a Project (the same shape as the save/open file)
+// and restored on load; the Base stays editable only via Open (clones read it).
 
 import { PROJECT, cloneObjects } from './lib/model';
-import type { Role, SongObject } from './lib/model';
+import type { Role, SongObject, Base, Chart, Project } from './lib/model';
 
 const KEY = 'bandassemble:' + PROJECT.id;
-const SCHEMA = 3;
 
-interface Saved {
-  v: number;
-  title: string;
+interface Snapshot {
+  meta: { id: string; title: string; base: Base };
   roles: Role[];
   charts: Record<string, SongObject[]>;
 }
 
-function defaults(): { roles: Role[]; charts: Record<string, SongObject[]> } {
+function defaultCharts(): Record<string, SongObject[]> {
   const c: Record<string, SongObject[]> = {};
   for (const r of PROJECT.roles) c[r.id] = PROJECT.charts[r.id]?.objects ?? [];
-  return { roles: PROJECT.roles.map((r) => ({ ...r })), charts: c };
+  return c;
 }
 
-function restore(): { roles: Role[]; charts: Record<string, SongObject[]> } {
+function fromProject(p: Project): Snapshot {
+  const ch: Record<string, SongObject[]> = {};
+  for (const id of Object.keys(p.charts)) ch[id] = p.charts[id].objects;
+  return { meta: { id: p.id, title: p.title, base: p.base }, roles: p.roles, charts: ch };
+}
+
+function restore(): Snapshot {
   try {
     const raw = localStorage.getItem(KEY);
     if (raw) {
-      const s = JSON.parse(raw) as Saved;
-      if (s && s.v === SCHEMA && Array.isArray(s.roles) && s.charts) {
-        return { roles: s.roles, charts: s.charts };
+      const p = JSON.parse(raw) as Project;
+      if (p && p.schemaVersion === 3 && Array.isArray(p.roles) && p.charts && p.base) {
+        return fromProject(p);
       }
     }
   } catch {
     /* ignore — private mode, bad data, etc. */
   }
-  return defaults();
+  return {
+    meta: { id: PROJECT.id, title: PROJECT.title, base: PROJECT.base },
+    roles: PROJECT.roles.map((r) => ({ ...r })),
+    charts: defaultCharts(),
+  };
 }
 
 const seeded = restore();
 
+export const meta = $state(seeded.meta);
 export const view = $state<{ roleId: string; editing: boolean }>({
   roleId: seeded.roles[0]?.id ?? PROJECT.roles[0].id,
   editing: false,
 });
-
 export const roles = $state<Role[]>(seeded.roles);
 export const charts = $state<Record<string, SongObject[]>>(seeded.charts);
 
+/** The live arrangement as a Project — the storage AND save/open file format. */
+export function currentProject(): Project {
+  const c: Record<string, Chart> = {};
+  for (const id of Object.keys(charts)) c[id] = { roleId: id, objects: charts[id] };
+  return {
+    schemaVersion: 3,
+    id: meta.id,
+    title: meta.title,
+    base: meta.base,
+    roles: [...roles],
+    charts: c,
+  };
+}
+
 function save(): void {
   try {
-    localStorage.setItem(
-      KEY,
-      JSON.stringify({ v: SCHEMA, title: PROJECT.title, roles, charts } satisfies Saved),
-    );
+    localStorage.setItem(KEY, JSON.stringify(currentProject()));
   } catch {
     /* ignore — quota / unavailable */
   }
@@ -72,7 +86,7 @@ function slug(s: string): string {
     s
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '') || 'role'
+      .replace(/(^-|-$)/g, '') || 'project'
   );
 }
 
@@ -90,7 +104,7 @@ export function addRole(label: string): string {
 
 /** Fill an empty Role's chart with a clone of the Base lyrics (the skeleton). */
 export function cloneBaseInto(roleId: string): void {
-  charts[roleId] = cloneObjects(PROJECT.base.lyrics);
+  charts[roleId] = cloneObjects(meta.base.lyrics);
   save();
 }
 
@@ -111,5 +125,27 @@ export function resetProject(): void {
   } catch {
     /* ignore */
   }
+  location.reload();
+}
+
+/** Download the whole arrangement as a .band.json project file. */
+export function saveProjectFile(): void {
+  const text = JSON.stringify(currentProject(), null, 2);
+  const blob = new Blob([text], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = slug(meta.title) + '.band.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/** Open a project file: validate, persist, reload so everything re-seeds cleanly. */
+export async function openProjectFile(file: File): Promise<void> {
+  const p = JSON.parse(await file.text()) as Project;
+  if (!p || p.schemaVersion !== 3 || !Array.isArray(p.roles) || !p.charts || !p.base) {
+    throw new Error('Not a bandAssemble project file (schemaVersion 3).');
+  }
+  localStorage.setItem(KEY, JSON.stringify(p));
   location.reload();
 }
