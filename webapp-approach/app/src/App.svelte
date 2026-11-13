@@ -25,21 +25,74 @@
 {:else if SEAT === 'editor'}
   <Editor />
 {:else if session}
-  <section>
-    <div class="role-badge {SEAT}">{SEAT === 'maestro' ? '🎛️ MAESTRO' : '📱 PLAYER'}</div>
-    <div class="grid">
-      <div class="panel">
-        <h2>Transport</h2>
-        <TransportPanel />
-        {#if SEAT === 'maestro'}
-          <MaestroControls />
-        {/if}
-      </div>
-      <div class="panel">
-        <h2>{SEAT === 'player' ? 'Your chart (follows Maestro)' : 'Chart'}</h2>
-        <Chart />
-      </div>
+  <section class="stage">
+    <div class="topbar">
+      <div class="role-badge {SEAT}">{SEAT === 'maestro' ? '🎛️ MAESTRO' : '📱 PLAYER'}</div>
+      <details class="meta">
+        <summary>details</summary>
+        <div class="meta-body">
+          <TransportPanel />
+          {#if SEAT === 'maestro'}
+            <MaestroControls />
+          {/if}
+        </div>
+      </details>
+    </div>
+    <div class="chart-fill">
+      <Chart />
     </div>
   </section>
   <TransportBar />
 {/if}
+
+<style>
+  /* Full-screen performance stage: the chart fills everything between the header
+     and the sticky transport bar. Overrides the centered, max-width section. */
+  .stage {
+    max-width: none;
+    margin: 0;
+    height: calc(100dvh - 58px); /* header */
+    padding: 10px 16px 78px; /* bottom clears the fixed TransportBar */
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .topbar {
+    flex: none;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .topbar .role-badge {
+    margin-bottom: 0;
+  }
+  .meta {
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .meta summary {
+    cursor: pointer;
+    user-select: none;
+    padding: 5px 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    list-style: none;
+  }
+  .meta summary::-webkit-details-marker {
+    display: none;
+  }
+  .meta[open] summary {
+    border-color: var(--accent);
+  }
+  .meta-body {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 24px;
+    margin-top: 10px;
+    max-width: 640px;
+  }
+  .chart-fill {
+    flex: 1;
+    min-height: 0;
+  }
+</style>
