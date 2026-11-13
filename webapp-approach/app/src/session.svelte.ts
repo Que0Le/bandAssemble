@@ -47,6 +47,7 @@ export class Session {
   offset = $state(0);
   rtt = $state(Infinity);
   lastSync = $state(0);
+  detached = $state(false); // Player force-stopped locally & ignoring the band
 
   private transport: WsTransport;
   private clock: ClockSync;
@@ -93,6 +94,7 @@ export class Session {
       });
     } else {
       this.transport.on('state/transport', (p: TransportMsg) => {
+        if (this.detached) return; // force-stopped locally; ignore the band until rejoin
         this.follow = {
           state: p.state,
           atSec: p.atSec,
@@ -281,6 +283,27 @@ export class Session {
   }
   jump(label: string) {
     this.transport.send('intent/jumpMarker', { label });
+  }
+
+  /** Emergency local stop. The Maestro just pauses (authoritative). A Player
+   *  freezes where it is and detaches from the band — so a stale or delayed
+   *  broadcast can't un-stop it (the point: survive a bad connection). */
+  forceStop() {
+    if (this.seat === 'maestro') {
+      this.maestroPause();
+      return;
+    }
+    const at = this.followPlayhead();
+    this.follow = { state: 'paused', atSec: at, localStart: this.now(), rate: 1, loop: null };
+    this.detached = true;
+  }
+
+  /** Re-join the band after a force stop: stop ignoring broadcasts and ask the
+   *  Maestro to resend its current state so we resync. */
+  rejoin() {
+    if (this.seat !== 'player') return;
+    this.detached = false;
+    this.transport.send('session/hello', { seat: this.seat });
   }
 }
 
