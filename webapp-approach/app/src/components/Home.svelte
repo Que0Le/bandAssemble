@@ -6,7 +6,6 @@
   import { onMount } from 'svelte';
   import {
     listProjects,
-    createProject,
     duplicateProject,
     deleteProject,
     renameProject,
@@ -26,14 +25,6 @@
     const sp = new URLSearchParams();
     sp.set('project', id);
     location.search = sp.toString();
-  }
-
-  // --- create ---
-  let newTitle = $state('');
-  function createNow() {
-    const t = newTitle.trim();
-    if (!t) return;
-    open(createProject(t));
   }
 
   // --- import ---
@@ -135,16 +126,7 @@
     <label class="btn import" title="Import a .band.json project (added as a new project)">
       ⤒ Import file<input type="file" accept="application/json,.json" onchange={onImport} />
     </label>
-  </div>
-
-  <div class="create">
-    <input
-      class="new-in"
-      placeholder="New project title…"
-      bind:value={newTitle}
-      onkeydown={(e) => e.key === 'Enter' && createNow()}
-    />
-    <button class="btn primary" onclick={createNow} disabled={!newTitle.trim()}>＋ Create</button>
+    <a class="btn primary" href="?new=1">＋ New project</a>
   </div>
 
   {#if msg}<p class="msg">{msg}</p>{/if}
@@ -215,26 +197,15 @@
     color: #8b93a3;
     font-size: 0.78rem;
   }
-  .create {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 8px;
-  }
-  .new-in,
   .rename-in {
+    width: 100%;
+    font-weight: 650;
     background: #0f1218;
     color: #e6edf3;
     border: 1px solid #2a3340;
     border-radius: 8px;
     padding: 8px 12px;
     font-size: 0.95rem;
-  }
-  .new-in {
-    flex: 1;
-  }
-  .rename-in {
-    width: 100%;
-    font-weight: 650;
   }
   .msg {
     color: #ffcf6b;
