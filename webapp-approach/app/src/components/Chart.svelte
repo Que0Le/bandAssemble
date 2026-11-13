@@ -1,7 +1,7 @@
 <script lang="ts">
   import { session } from '../session.svelte';
   import { PROJECT, objectIndexAt, nextStart } from '../lib/model';
-  import { view, currentObjects } from '../view.svelte';
+  import { view, currentObjects, roles, addRole, cloneBaseInto } from '../view.svelte';
   import { chordSvg } from '../lib/chordDiagram';
   import { sheet } from '../lib/serialize';
   import { copyText } from '../lib/clipboard';
@@ -9,6 +9,16 @@
   import ChartEdit from './ChartEdit.svelte';
   const s = session!;
   const objects = $derived(currentObjects());
+  const roleLabel = $derived(roles.find((r) => r.id === view.roleId)?.label ?? view.roleId);
+
+  let newRole = $state('');
+  function addRoleNow() {
+    const id = addRole(newRole);
+    newRole = '';
+    view.editing = false;
+    view.roleId = id;
+  }
+  const cloneBase = () => cloneBaseInto(view.roleId);
 
   let chartH = $state(360);
   let els = $state<HTMLElement[]>([]);
@@ -64,9 +74,18 @@
   <label class="role-pick"
     >Role
     <select bind:value={view.roleId}>
-      {#each PROJECT.roles as r}<option value={r.id}>{r.label}</option>{/each}
+      {#each roles as r}<option value={r.id}>{r.label}</option>{/each}
     </select>
   </label>
+  <input
+    class="new-role"
+    placeholder="+ role"
+    bind:value={newRole}
+    onkeydown={(e) => e.key === 'Enter' && newRole.trim() && addRoleNow()}
+  />
+  {#if newRole.trim()}
+    <button class="copy-btn" onclick={addRoleNow}>Add</button>
+  {/if}
   <span class="spacer"></span>
   {#if !view.editing}
     <span class="hint">Select any text to copy — or</span>
@@ -79,6 +98,12 @@
 
 {#if view.editing}
   <ChartEdit />
+{:else if objects.length === 0}
+  <div class="empty">
+    <p>No chart for <b>{roleLabel}</b> yet.</p>
+    <button class="clone-btn" onclick={cloneBase}>⎘ Clone lyrics from Base</button>
+    <p class="sub">Then press ✎ Edit to add this part's chords / strum, and Hand off to share.</p>
+  </div>
 {:else}
   <div
     class="chart"
@@ -148,6 +173,46 @@
     border-radius: 8px;
     padding: 4px 8px;
     font-size: 0.82rem;
+  }
+  .new-role {
+    width: 90px;
+    background: #0f1218;
+    color: #e6edf3;
+    border: 1px solid #2a3340;
+    border-radius: 8px;
+    padding: 4px 8px;
+    font-size: 0.82rem;
+  }
+  .empty {
+    height: 56vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    border: 1px dashed #2a3340;
+    border-radius: 10px;
+    color: #cfd6e2;
+    text-align: center;
+    padding: 0 20px;
+  }
+  .empty .sub {
+    color: #8b93a3;
+    font-size: 0.82rem;
+    margin: 0;
+    max-width: 320px;
+  }
+  .clone-btn {
+    cursor: pointer;
+    background: #1b3326;
+    border: 1px solid #2f6b45;
+    color: #bdf0cf;
+    border-radius: 8px;
+    padding: 9px 16px;
+    font-size: 0.95rem;
+  }
+  .clone-btn:hover {
+    border-color: #4fd1c5;
   }
   .copy-btn {
     cursor: pointer;

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { PROJECT, objectIndexAt } from '../lib/model';
   import type { SongObject } from '../lib/model';
+  import { roles, charts } from '../view.svelte';
   import { parseSheet, autoTime } from '../lib/parseSheet';
   import { objectsText } from '../lib/serialize';
   import { copyText } from '../lib/clipboard';
@@ -8,8 +9,8 @@
 
   const r2 = (n: number) => Math.round(n * 100) / 100;
 
-  const firstRole = PROJECT.roles[0].id;
-  const initialSheet = objectsText(PROJECT.charts[firstRole].objects);
+  const firstRole = roles[0].id;
+  const initialSheet = objectsText(charts[firstRole] ?? []);
   let roleId = $state(firstRole);
   let title = $state(PROJECT.title);
   let sheet = $state(initialSheet);
@@ -39,7 +40,7 @@
     note('parsed ' + objects.length + ' objects');
   }
   function loadRole() {
-    sheet = objectsText(PROJECT.charts[roleId].objects);
+    sheet = objectsText(charts[roleId] ?? []);
     parse();
     note('loaded ' + roleId + ' chart');
   }
@@ -114,7 +115,7 @@
     <label class="role-sel"
       >Role
       <select bind:value={roleId}>
-        {#each PROJECT.roles as r}<option value={r.id}>{r.label}</option>{/each}
+        {#each roles as r}<option value={r.id}>{r.label}</option>{/each}
       </select>
     </label>
     <button class="btn" onclick={loadRole}>Load role</button>
