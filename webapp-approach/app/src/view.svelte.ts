@@ -112,6 +112,21 @@ export function cloneInto(targetRoleId: string, sourceKey: string): void {
   save();
 }
 
+/** Write the Base lyric/timing skeleton (what the sync step edits). Roles clone
+ *  from this; it is NOT a Role, so it never appears in the Role list. */
+export function setBase(objects: SongObject[]): void {
+  meta.base.lyrics = objects;
+  save();
+}
+
+/** Record the Base's media reference (filename + duration). The bytes live in
+ *  IndexedDB; this just notes what's attached and sets the song length. */
+export function setBaseAudio(fileName: string, durationSec: number): void {
+  meta.base.audio = { fileName, durationSec };
+  if (durationSec) meta.base.lengthSec = Math.round(durationSec * 100) / 100;
+  save();
+}
+
 /** Apply a chart (local edit or distributed). Auto-registers an unknown Role so
  *  a handed-off part shows up in everyone's Role list. */
 export function setChart(roleId: string, objects: SongObject[]): void {

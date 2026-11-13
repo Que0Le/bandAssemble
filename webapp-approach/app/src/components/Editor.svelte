@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { objectIndexAt } from '../lib/model';
   import type { SongObject } from '../lib/model';
   import {
@@ -10,22 +10,37 @@
     saveProjectFile,
     openProjectFile,
     setChart,
+    setBase,
+    setBaseAudio,
+    activeId,
   } from '../view.svelte';
-  import { parseSheet, autoTime } from '../lib/parseSheet';
+  import { getMediaUrl, putMedia } from '../lib/media';
+  import { parseSheet, autoTime, reTime } from '../lib/parseSheet';
   import { objectsText } from '../lib/serialize';
   import { copyText } from '../lib/clipboard';
   import ObjectView from './ObjectView.svelte';
 
   const r2 = (n: number) => Math.round(n * 100) / 100;
 
-  // Open on the Role passed from the chart's "Full editor…" button (?role=…),
-  // falling back to the first Role. Guard an empty roles list.
+  // The edit target is either the Base (lyric/timing skeleton) or a Role's chart.
+  // Open on ?role= (from the chart's "Full editor…" or the wizard); a project with
+  // no Roles yet (fresh from the wizard) starts on the Base so there's content to sync.
+  const BASE = '__base__';
   const params = new URLSearchParams(location.search);
-  const firstRole = roles[0]?.id ?? '';
   const wanted = params.get('role');
-  const startRole = wanted && roles.some((r) => r.id === wanted) ? wanted : firstRole;
-  const initialSheet = objectsText(charts[startRole] ?? []);
-  let roleId = $state(startRole);
+  function resolveTarget(): string {
+    if (wanted === 'base' || wanted === BASE) return BASE;
+    if (wanted && roles.some((r) => r.id === wanted)) return wanted;
+    return roles.length === 0 ? BASE : roles[0].id;
+  }
+  const storedObjs = (target: string): SongObject[] =>
+    target === BASE ? meta.base.lyrics : (charts[target] ?? []);
+  const sheetFor = (target: string): string => objectsText(storedObjs(target));
+
+  const startTarget = resolveTarget();
+  const initialSheet = sheetFor(startTarget);
+  let roleId = $state(startTarget);
+  const isBase = $derived(roleId === BASE);
   let title = $state(meta.title);
 
   async function onOpen(e: Event) {
@@ -38,12 +53,15 @@
     }
   }
   let sheet = $state(initialSheet);
-  let objects = $state<SongObject[]>(autoTime(parseSheet(initialSheet)));
+  // Preserve any existing per-object times on load (the text form carries none);
+  // only the explicit "Parse" button below resets timing.
+  let objects = $state<SongObject[]>(reTime(parseSheet(initialSheet), storedObjs(startTarget)));
 
-  // audio for tap-to-time
-  let audioEl = $state<HTMLAudioElement | undefined>(undefined);
+  // audio / video for tap-to-time (a video is handy while syncing)
+  let mediaEl = $state<HTMLMediaElement | undefined>(undefined);
   let audioUrl = $state('');
   let audioName = $state('');
+  let mediaIsVideo = $state(false);
   let playing = $state(false);
   let curTime = $state(0);
   let tapIdx = $state(0);
@@ -58,38 +76,46 @@
 
   const activeIdx = $derived(objectIndexAt(objects, curTime));
 
+  // Explicit re-parse: resets timing to a sequential placeholder (use after a
+  // structural text change, then re-tap). Loading a target preserves its times.
   function parse() {
     objects = autoTime(parseSheet(sheet));
     tapIdx = 0;
     note('parsed ' + objects.length + ' objects');
   }
   function loadRole() {
-    sheet = objectsText(charts[roleId] ?? []);
-    parse();
-    note('loaded ' + roleId + ' chart');
+    sheet = sheetFor(roleId);
+    objects = reTime(parseSheet(sheet), storedObjs(roleId));
+    tapIdx = 0;
+    note('loaded ' + (isBase ? 'Base' : roleId));
   }
 
-  function onFile(e: Event) {
+  // Replace the project's media: store the blob in IndexedDB and note it on the Base.
+  async function onFile(e: Event) {
     const f = (e.target as HTMLInputElement).files?.[0];
     if (!f) return;
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     audioUrl = URL.createObjectURL(f);
     audioName = f.name;
+    mediaIsVideo = f.type.startsWith('video/');
     curTime = 0;
+    const m = await putMedia(activeId, f);
+    setBaseAudio(f.name, m.durationSec);
+    note('media stored · ' + f.name);
   }
   function togglePlay() {
-    if (!audioEl) return;
-    if (playing) audioEl.pause();
-    else audioEl.play();
+    if (!mediaEl) return;
+    if (playing) mediaEl.pause();
+    else mediaEl.play();
   }
   function seekTo(sec: number) {
-    if (audioEl) audioEl.currentTime = Math.max(0, sec);
+    if (mediaEl) mediaEl.currentTime = Math.max(0, sec);
   }
 
   // Stamp the next object's start at the current audio time; close the previous.
   function tap() {
     if (tapIdx >= objects.length) return;
-    const tt = r2(audioEl ? audioEl.currentTime : curTime);
+    const tt = r2(mediaEl ? mediaEl.currentTime : curTime);
     objects[tapIdx].startSec = tt;
     if (tapIdx > 0) objects[tapIdx - 1].endSec = tt;
     tapIdx++;
@@ -133,18 +159,33 @@
   // Commit the edited objects into the project store (+ localStorage) — the single
   // source of truth the chart viewer and Save file both read. Without this, the
   // tap-to-time work here never leaves the Editor (the old Save-file trap).
+  function commit() {
+    if (isBase) setBase(objects);
+    else setChart(roleId, objects);
+  }
   function saveToProject() {
-    setChart(roleId, objects);
-    note('saved ' + roleId + ' to project');
+    commit();
+    note('saved ' + (isBase ? 'Base' : roleId) + ' to project');
   }
   function saveFile() {
-    setChart(roleId, objects); // the download must reflect these edits
+    commit(); // the download must reflect these edits
     saveProjectFile();
   }
   function goBack() {
     if (history.length > 1) history.back();
-    else location.href = location.pathname; // no history → role chooser
+    else location.href = location.pathname; // no history → projects list
   }
+
+  // Auto-load this project's stored media (audio or video) so the wizard hand-off
+  // lands on a ready-to-sync screen — no re-picking the file.
+  onMount(async () => {
+    const got = await getMediaUrl(activeId);
+    if (got) {
+      audioUrl = got.url;
+      audioName = got.meta.name;
+      mediaIsVideo = got.meta.type.startsWith('video/');
+    }
+  });
 
   onDestroy(() => {
     if (audioUrl) URL.revokeObjectURL(audioUrl);
@@ -158,12 +199,13 @@
     <button class="btn" onclick={goBack} title="Back to the band view">← Back</button>
     <input class="title-in" bind:value={title} aria-label="song title" />
     <label class="role-sel"
-      >Role
+      >Edit
       <select bind:value={roleId}>
+        <option value={BASE}>Base (lyrics)</option>
         {#each roles as r}<option value={r.id}>{r.label}</option>{/each}
       </select>
     </label>
-    <button class="btn" onclick={loadRole}>Load role</button>
+    <button class="btn" onclick={loadRole}>Load</button>
     <div class="spacer"></div>
     <button
       class="btn save"
@@ -204,18 +246,33 @@
     <div class="panel">
       <h2>Timing</h2>
       <div class="row">
-        <label class="file">load audio <input type="file" accept="audio/*" onchange={onFile} /></label>
+        <label class="file"
+          >load media <input type="file" accept="audio/*,video/*" onchange={onFile} /></label
+        >
         {#if audioName}<span class="hint">{audioName}</span>{/if}
       </div>
       {#if audioUrl}
-        <audio
-          bind:this={audioEl}
-          src={audioUrl}
-          ontimeupdate={() => (curTime = audioEl ? audioEl.currentTime : 0)}
-          onplay={() => (playing = true)}
-          onpause={() => (playing = false)}
-          onended={() => (playing = false)}
-        ></audio>
+        {#if mediaIsVideo}
+          <!-- svelte-ignore a11y_media_has_caption -->
+          <video
+            class="vid"
+            bind:this={mediaEl}
+            src={audioUrl}
+            ontimeupdate={() => (curTime = mediaEl ? mediaEl.currentTime : 0)}
+            onplay={() => (playing = true)}
+            onpause={() => (playing = false)}
+            onended={() => (playing = false)}
+          ></video>
+        {:else}
+          <audio
+            bind:this={mediaEl}
+            src={audioUrl}
+            ontimeupdate={() => (curTime = mediaEl ? mediaEl.currentTime : 0)}
+            onplay={() => (playing = true)}
+            onpause={() => (playing = false)}
+            onended={() => (playing = false)}
+          ></audio>
+        {/if}
         <div class="row tap-row">
           <button class="btn" onclick={togglePlay}>{playing ? '⏸' : '▶'}</button>
           <b class="clock">{curTime.toFixed(2)}s</b>
@@ -230,7 +287,7 @@
           {/if}
         </p>
       {:else}
-        <p class="hint">Load an audio file to tap-to-time, or edit the seconds directly below.</p>
+        <p class="hint">Load an audio or video file to tap-to-time, or edit the seconds directly below.</p>
       {/if}
 
       <div class="tbl">
@@ -348,6 +405,13 @@
   }
   .file input {
     max-width: 180px;
+  }
+  .vid {
+    width: 100%;
+    max-height: 220px;
+    background: #000;
+    border-radius: 8px;
+    margin-top: 6px;
   }
   .tap-row {
     align-items: center;
