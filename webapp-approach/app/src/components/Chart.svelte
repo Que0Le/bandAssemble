@@ -12,21 +12,34 @@
 
   let chartH = $state(360);
   let els = $state<HTMLElement[]>([]);
+  let chartEl = $state<HTMLElement | undefined>(undefined);
 
   const idx = $derived(objectIndexAt(objects, s.playhead));
 
-  // Center-lock scroll: translate so the active object's current point sits at
-  // the viewport middle. Heights vary (label / 1–3 row line / tab), so we read
-  // the active element's real offsetTop + height instead of a fixed line height.
-  const y = $derived.by(() => {
-    const i = idx;
-    const el = els[i];
-    if (i < 0 || !el) return 0;
-    const start = objects[i].startSec;
-    const end = nextStart(objects, i, PROJECT.base.lengthSec);
-    const frac = Math.min(1, Math.max(0, (s.playhead - start) / Math.max(0.001, end - start)));
-    return el.offsetTop + frac * el.offsetHeight;
+  // Auto-scroll to the playhead by setting real scrollTop, so the chart stays a
+  // normal scroll container the user can also scroll by hand. This runs only when
+  // the playhead MOVES — every frame while playing, and once per seek. When paused
+  // the playhead is constant, so manual scrolling is never fought. While playing we
+  // disable manual scroll (.chart.playing { overflow: hidden }); programmatic
+  // scrollTop still works. Heights vary, so we read the active element's real
+  // offsetTop/height rather than assume a fixed line height.
+  $effect(() => {
+    const ph = s.playhead; // dependency: re-run when the playhead moves
+    const h = chartH; // dependency: re-center on resize
+    const el = els[idx];
+    if (!chartEl || idx < 0 || !el) return;
+    const start = objects[idx].startSec;
+    const end = nextStart(objects, idx, PROJECT.base.lengthSec);
+    const frac = Math.min(1, Math.max(0, (ph - start) / Math.max(0.001, end - start)));
+    chartEl.scrollTop = el.offsetTop + frac * el.offsetHeight - h / 2;
   });
+
+  // Click a line/label to jump the whole band there (unless selecting text).
+  function jumpTo(obj: { startSec: number }) {
+    if (!window.getSelection()?.isCollapsed) return;
+    if (s.seat === 'maestro') s.seek(obj.startSec);
+    else s.askSeek(obj.startSec);
+  }
 
   // Chord tooltip (fixed-positioned so it escapes the chart's overflow:hidden).
   let tip = $state<{ x: number; y: number; html: string; name: string } | null>(null);
@@ -67,10 +80,27 @@
 {#if view.editing}
   <ChartEdit />
 {:else}
-  <div class="chart" bind:clientHeight={chartH}>
-    <div class="scroller" style:transform={`translateY(${chartH / 2 - y}px)`}>
+  <div
+    class="chart"
+    class:playing={s.uiState === 'playing'}
+    bind:this={chartEl}
+    bind:clientHeight={chartH}
+  >
+    <div
+      class="scroller"
+      style:padding-top={`${chartH / 2}px`}
+      style:padding-bottom={`${chartH / 2}px`}
+    >
       {#each objects as obj, i (obj.id)}
-        <div class="obj" class:active={i === idx} bind:this={els[i]}>
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <div
+          class="obj"
+          class:active={i === idx}
+          role="button"
+          tabindex="-1"
+          bind:this={els[i]}
+          onclick={() => jumpTo(obj)}
+        >
           <ObjectView {obj} onChordEnter={showTip} onChordLeave={hideTip} />
         </div>
       {/each}
@@ -134,22 +164,22 @@
   .chart {
     position: relative;
     height: 56vh;
-    overflow-x: auto; /* long monospace lines can scroll instead of clipping */
-    overflow-y: hidden;
+    overflow: auto; /* real scrolling: by hand when paused, programmatic when playing */
+    overscroll-behavior: contain;
     border: 1px solid #2a2f3a;
     border-radius: 10px;
     background: #0f1218;
     -webkit-mask-image: linear-gradient(transparent, #000 14%, #000 86%, transparent);
     mask-image: linear-gradient(transparent, #000 14%, #000 86%, transparent);
   }
+  .chart.playing {
+    overflow: hidden; /* follow the playhead; no hand-scrolling during playback */
+  }
   .scroller {
-    position: absolute;
-    left: 0;
-    right: auto;
     min-width: 100%;
     width: max-content;
-    padding: 0 18px;
-    will-change: transform;
+    padding-left: 18px;
+    padding-right: 18px;
   }
   /* Everything in the chart is real, selectable text. */
   .obj {

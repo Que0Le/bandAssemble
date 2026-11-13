@@ -262,6 +262,9 @@ export class Session {
   askPause() {
     this.transport.send('intent/pause', {});
   }
+  askSeek(atSec: number) {
+    this.transport.send('intent/seek', { atSec });
+  }
   jump(label: string) {
     this.transport.send('intent/jumpMarker', { label });
   }
