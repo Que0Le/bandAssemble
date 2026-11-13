@@ -1,60 +1,54 @@
-// Device-local view state + the live arrangement (meta + roles + charts), kept
-// reactive so edits, clones, distribution and Open all re-render. Everything is
-// auto-saved to localStorage as a Project (the same shape as the save/open file)
-// and restored on load; the Base stays editable only via Open (clones read it).
+// Device-local view state + the live arrangement (meta + roles + charts) for the
+// ACTIVE project, kept reactive so edits, clones, distribution and Open all
+// re-render. The project is chosen at load from ?project=<id> (else the last
+// opened, else the seeded sample) and auto-saved to localStorage through the
+// registry (lib/projects). Big media lives in IndexedDB (lib/media), not here.
 
-import { PROJECT, cloneObjects } from './lib/model';
+import { cloneObjects } from './lib/model';
 import type { Role, SongObject, Base, Chart, Project } from './lib/model';
+import {
+  seedSampleIfEmpty,
+  loadProject,
+  saveProject,
+  importProject,
+  getLastOpened,
+  setLastOpened,
+} from './lib/projects';
 
-const KEY = 'bandassemble:' + PROJECT.id;
+const params = new URLSearchParams(location.search);
 
-interface Snapshot {
-  meta: { id: string; title: string; base: Base };
-  roles: Role[];
-  charts: Record<string, SongObject[]>;
+/** Which project to open: ?project=, else last opened, else the seeded sample. */
+function resolveActiveId(): string {
+  const fallback = seedSampleIfEmpty(); // guarantees at least one loadable project
+  const wanted = params.get('project');
+  if (wanted && loadProject(wanted)) return wanted;
+  const last = getLastOpened();
+  if (last && loadProject(last)) return last;
+  return fallback;
 }
 
-function defaultCharts(): Record<string, SongObject[]> {
-  const c: Record<string, SongObject[]> = {};
-  for (const r of PROJECT.roles) c[r.id] = PROJECT.charts[r.id]?.objects ?? [];
-  return c;
-}
+export const activeId = resolveActiveId();
+setLastOpened(activeId);
+const active: Project = loadProject(activeId)!; // resolveActiveId guarantees this loads
 
-function fromProject(p: Project): Snapshot {
+function chartsToObjects(p: Project): Record<string, SongObject[]> {
   const ch: Record<string, SongObject[]> = {};
   for (const id of Object.keys(p.charts)) ch[id] = p.charts[id].objects;
-  return { meta: { id: p.id, title: p.title, base: p.base }, roles: p.roles, charts: ch };
+  return ch;
 }
 
-function restore(): Snapshot {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) {
-      const p = JSON.parse(raw) as Project;
-      if (p && p.schemaVersion === 3 && Array.isArray(p.roles) && p.charts && p.base) {
-        return fromProject(p);
-      }
-    }
-  } catch {
-    /* ignore — private mode, bad data, etc. */
-  }
-  return {
-    meta: { id: PROJECT.id, title: PROJECT.title, base: PROJECT.base },
-    roles: PROJECT.roles.map((r) => ({ ...r })),
-    charts: defaultCharts(),
-  };
-}
-
-const seeded = restore();
-
-export const meta = $state(seeded.meta);
+export const meta = $state<{ id: string; title: string; base: Base }>({
+  id: active.id,
+  title: active.title,
+  base: active.base,
+});
 export const view = $state<{ roleId: string; editing: boolean; autoScroll: boolean }>({
-  roleId: seeded.roles[0]?.id ?? PROJECT.roles[0].id,
+  roleId: active.roles[0]?.id ?? '',
   editing: false,
   autoScroll: true, // auto-turn pages while playing; off = flip by hand (seeks still scroll)
 });
-export const roles = $state<Role[]>(seeded.roles);
-export const charts = $state<Record<string, SongObject[]>>(seeded.charts);
+export const roles = $state<Role[]>(active.roles.map((r) => ({ ...r })));
+export const charts = $state<Record<string, SongObject[]>>(chartsToObjects(active));
 
 /** The live arrangement as a Project — the storage AND save/open file format. */
 export function currentProject(): Project {
@@ -71,11 +65,7 @@ export function currentProject(): Project {
 }
 
 function save(): void {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(currentProject()));
-  } catch {
-    /* ignore — quota / unavailable */
-  }
+  saveProject(currentProject());
 }
 
 export function currentObjects(): SongObject[] {
@@ -108,7 +98,8 @@ export function addRole(label: string): string {
 export function cloneSources(targetRoleId: string): Array<{ key: string; label: string }> {
   const out = [{ key: 'base', label: 'Base lyrics' }];
   for (const r of roles) {
-    if (r.id !== targetRoleId && (charts[r.id]?.length ?? 0) > 0) out.push({ key: r.id, label: r.label });
+    if (r.id !== targetRoleId && (charts[r.id]?.length ?? 0) > 0)
+      out.push({ key: r.id, label: r.label });
   }
   return out;
 }
@@ -131,17 +122,12 @@ export function setChart(roleId: string, objects: SongObject[]): void {
   save();
 }
 
-/** Discard the saved copy and reload the pristine sample. */
+/** Reload the active project from storage (discards unsaved in-memory state). */
 export function resetProject(): void {
-  try {
-    localStorage.removeItem(KEY);
-  } catch {
-    /* ignore */
-  }
   location.reload();
 }
 
-/** Download the whole arrangement as a .band.json project file. */
+/** Download the active arrangement as a .band.json project file. */
 export function saveProjectFile(): void {
   const text = JSON.stringify(currentProject(), null, 2);
   const blob = new Blob([text], { type: 'application/json' });
@@ -153,12 +139,17 @@ export function saveProjectFile(): void {
   URL.revokeObjectURL(url);
 }
 
-/** Open a project file: validate, persist, reload so everything re-seeds cleanly. */
+/** Open a project file: validate, import as a NEW project (never clobbering an
+ *  existing one), then reload into it. The file is text-only — any media must be
+ *  re-attached on the device that needs it (only the Maestro does). */
 export async function openProjectFile(file: File): Promise<void> {
   const p = JSON.parse(await file.text()) as Project;
   if (!p || p.schemaVersion !== 3 || !Array.isArray(p.roles) || !p.charts || !p.base) {
     throw new Error('Not a bandAssemble project file (schemaVersion 3).');
   }
-  localStorage.setItem(KEY, JSON.stringify(p));
-  location.reload();
+  const id = importProject(p);
+  setLastOpened(id);
+  const sp = new URLSearchParams(location.search);
+  sp.set('project', id);
+  location.search = sp.toString();
 }
