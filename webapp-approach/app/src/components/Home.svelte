@@ -17,6 +17,7 @@
     type ProjectMeta,
   } from '../lib/projects';
   import { storageEstimate, requestPersist, hasMedia } from '../lib/media';
+  import { mmss } from '../lib/util';
 
   let projects = $state<ProjectMeta[]>(listProjects());
   function refresh() {
@@ -115,14 +116,6 @@
     if (d < 86400000) return Math.round(d / 3600000) + 'h ago';
     return new Date(ts).toLocaleDateString();
   }
-  function dur(s: number) {
-    if (!s) return '';
-    const m = Math.floor(s / 60);
-    const ss = Math.round(s % 60)
-      .toString()
-      .padStart(2, '0');
-    return `${m}:${ss}`;
-  }
 </script>
 
 <section class="home">
@@ -173,7 +166,7 @@
             {/if}
             <span class="sub">
               {when(p.updatedAt)}
-              {#if p.lengthSec}· ⏱ {dur(p.lengthSec)}{/if}
+              {#if p.lengthSec}· ⏱ {mmss(p.lengthSec)}{/if}
               {#if p.audioName}· 🎵 {p.audioName}{/if}
               {#if mediaMissing(p)}<span class="warn" title="The audio isn't stored on this device — open the project and re-attach it (⤒ load media) to play.">· ⚠ media not on this device</span>{/if}
             </span>

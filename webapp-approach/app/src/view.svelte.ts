@@ -10,10 +10,13 @@ import {
   seedSampleIfEmpty,
   loadProject,
   saveProject,
-  importProject,
+  importProjectFromText,
+  importBundle,
+  looksLikeBundle,
   getLastOpened,
   setLastOpened,
 } from './lib/projects';
+import { slug, r2, download } from './lib/util';
 
 const params = new URLSearchParams(location.search);
 
@@ -72,15 +75,6 @@ export function currentObjects(): SongObject[] {
   return charts[view.roleId] ?? [];
 }
 
-function slug(s: string): string {
-  return (
-    s
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '') || 'project'
-  );
-}
-
 /** Add a new, empty Role locally; returns its id. */
 export function addRole(label: string): string {
   const base = slug(label);
@@ -123,7 +117,7 @@ export function setBase(objects: SongObject[]): void {
  *  IndexedDB; this just notes what's attached and sets the song length. */
 export function setBaseAudio(fileName: string, durationSec: number): void {
   meta.base.audio = { fileName, durationSec };
-  if (durationSec) meta.base.lengthSec = Math.round(durationSec * 100) / 100;
+  if (durationSec) meta.base.lengthSec = r2(durationSec);
   save();
 }
 
@@ -144,25 +138,16 @@ export function resetProject(): void {
 
 /** Download the active arrangement as a .band.json project file. */
 export function saveProjectFile(): void {
-  const text = JSON.stringify(currentProject(), null, 2);
-  const blob = new Blob([text], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = slug(meta.title) + '.band.json';
-  a.click();
-  URL.revokeObjectURL(url);
+  const blob = new Blob([JSON.stringify(currentProject(), null, 2)], { type: 'application/json' });
+  download(blob, slug(meta.title) + '.band.json');
 }
 
-/** Open a project file: validate, import as a NEW project (never clobbering an
- *  existing one), then reload into it. The file is text-only — any media must be
- *  re-attached on the device that needs it (only the Maestro does). */
+/** Open a project or bundle file: import as a NEW project (never clobbering an
+ *  existing one), then reload into it. A .band.json is text-only — any media must
+ *  be re-attached on the device that needs it; a .bandpack carries its media. */
 export async function openProjectFile(file: File): Promise<void> {
-  const p = JSON.parse(await file.text()) as Project;
-  if (!p || p.schemaVersion !== 3 || !Array.isArray(p.roles) || !p.charts || !p.base) {
-    throw new Error('Not a bandAssemble project file (schemaVersion 3).');
-  }
-  const id = importProject(p);
+  const text = await file.text();
+  const id = looksLikeBundle(text) ? await importBundle(text) : importProjectFromText(text);
   setLastOpened(id);
   const sp = new URLSearchParams(location.search);
   sp.set('project', id);

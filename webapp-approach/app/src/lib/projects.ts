@@ -7,6 +7,7 @@ import { PROJECT } from './model';
 import type { Project } from './model';
 import { deleteMedia, getMediaBlob, putMediaBlob } from './media';
 import type { MediaMeta } from './media';
+import { slug, download } from './util';
 
 const INDEX_KEY = 'bandassemble:index';
 const LAST_KEY = 'bandassemble:last';
@@ -89,14 +90,6 @@ export function saveProject(p: Project): void {
   writeIndex(idx);
 }
 
-function slug(s: string): string {
-  return (
-    s
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '') || 'project'
-  );
-}
 function uniqueId(base: string): string {
   const idx = readIndex();
   let id = base;
@@ -196,15 +189,6 @@ function base64ToBlob(b64: string, type: string): Blob {
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return new Blob([bytes], { type });
-}
-
-function download(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
 }
 
 /** Download a project AND its stored media as one .bandpack file. */

@@ -120,14 +120,6 @@ export async function getMediaUrl(
   return { url: URL.createObjectURL(blob), meta };
 }
 
-export async function getMediaMeta(projectId: string): Promise<MediaMeta | null> {
-  const rec = await getRecord(projectId);
-  if (!rec) return null;
-  const { blob: _blob, ...meta } = rec;
-  void _blob;
-  return meta;
-}
-
 export async function hasMedia(projectId: string): Promise<boolean> {
   try {
     const n = await tx<number>('readonly', (s) => s.count(projectId));

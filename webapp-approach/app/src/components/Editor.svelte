@@ -18,9 +18,8 @@
   import { parseSheet, autoTime, reTime } from '../lib/parseSheet';
   import { objectsText } from '../lib/serialize';
   import { copyText } from '../lib/clipboard';
+  import { r2 } from '../lib/util';
   import ObjectView from './ObjectView.svelte';
-
-  const r2 = (n: number) => Math.round(n * 100) / 100;
 
   // The edit target is either the Base (lyric/timing skeleton) or a Role's chart.
   // Open on ?role= (from the chart's "Full editor…" or the wizard); a project with
@@ -225,11 +224,11 @@
     <button class="btn" onclick={saveFile} title="Download the whole project as a file (includes these edits)"
       >⤓ Save file</button
     >
-    <label class="btn open-lbl" title="Open a project file (replaces the current one)"
-      >⤒ Open file<input type="file" accept="application/json,.json" onchange={onOpen} /></label
+    <label class="btn open-lbl" title="Open a project (.band.json) or bundle (.bandpack) as a new project"
+      >⤒ Open file<input type="file" accept="application/json,.json,.bandpack" onchange={onOpen} /></label
     >
     <button class="btn" onclick={copyJson}>⧉ Copy JSON</button>
-    <button class="btn" onclick={resetProject} title="Discard saved changes, reload the sample"
+    <button class="btn" onclick={resetProject} title="Discard unsaved edits — reload this project from storage"
       >↺ Reset</button
     >
     {#if copied}<span class="flash">{copied}</span>{/if}

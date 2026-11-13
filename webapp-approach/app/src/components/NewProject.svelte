@@ -7,6 +7,7 @@
   import { createProject, loadProject, saveProject, setLastOpened } from '../lib/projects';
   import { putMedia, requestPersist } from '../lib/media';
   import { parseSheet, autoTime } from '../lib/parseSheet';
+  import { mmss, r2 } from '../lib/util';
 
   let step = $state(1);
   const home = () => location.pathname;
@@ -54,7 +55,7 @@
       p.base.lyrics = objs;
       // length: real media duration if known, else the end of the last parsed line
       const lastEnd = objs.length ? objs[objs.length - 1].endSec : 0;
-      p.base.lengthSec = Math.round((durationSec || lastEnd) * 100) / 100;
+      p.base.lengthSec = r2(durationSec || lastEnd);
       if (mediaFile) p.base.audio = { fileName: mediaFile.name, durationSec: p.base.lengthSec };
       saveProject(p);
       if (mediaFile) {
@@ -68,15 +69,6 @@
       err = (e as Error).message;
       busy = false;
     }
-  }
-
-  function fmt(s: number) {
-    if (!s) return '';
-    const m = Math.floor(s / 60);
-    const ss = Math.round(s % 60)
-      .toString()
-      .padStart(2, '0');
-    return `${m}:${ss}`;
   }
 
   onDestroy(() => {
@@ -138,7 +130,7 @@
             ></audio>
           {/if}
           <div class="mrow">
-            <span class="mname">{mediaFile.name}{#if durationSec} · {fmt(durationSec)}{/if}</span>
+            <span class="mname">{mediaFile.name}{#if durationSec} · {mmss(durationSec)}{/if}</span>
             <button class="btn ghost" onclick={clearMedia}>Remove</button>
           </div>
         </div>
