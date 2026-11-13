@@ -89,6 +89,27 @@ async function getRecord(projectId: string): Promise<MediaRecord | null> {
   }
 }
 
+/** Store a media blob with already-known metadata (no duration probe). Used when
+ *  importing a .bandpack, where the duration travelled with the bundle. */
+export async function putMediaBlob(
+  projectId: string,
+  blob: Blob,
+  meta: MediaMeta,
+): Promise<void> {
+  const rec: MediaRecord = { blob, ...meta };
+  await tx('readwrite', (s) => s.put(rec, projectId));
+}
+
+/** The raw blob + metadata for a project's media, or null. For export/bundling. */
+export async function getMediaBlob(
+  projectId: string,
+): Promise<{ blob: Blob; meta: MediaMeta } | null> {
+  const rec = await getRecord(projectId);
+  if (!rec) return null;
+  const { blob, ...meta } = rec;
+  return { blob, meta };
+}
+
 /** Object URL for a project's media (the CALLER must revokeObjectURL), or null. */
 export async function getMediaUrl(
   projectId: string,

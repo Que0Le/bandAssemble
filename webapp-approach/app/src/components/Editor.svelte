@@ -14,7 +14,7 @@
     setBaseAudio,
     activeId,
   } from '../view.svelte';
-  import { getMediaUrl, putMedia } from '../lib/media';
+  import { getMediaUrl, putMedia, requestPersist } from '../lib/media';
   import { parseSheet, autoTime, reTime } from '../lib/parseSheet';
   import { objectsText } from '../lib/serialize';
   import { copyText } from '../lib/clipboard';
@@ -62,6 +62,9 @@
   let audioUrl = $state('');
   let audioName = $state('');
   let mediaIsVideo = $state(false);
+  // Project names a media file, but its bytes aren't on this device (imported as
+  // text-only .band.json). Prompt the user to re-attach it with "load media".
+  let mediaMissing = $state(false);
   let playing = $state(false);
   let curTime = $state(0);
   let tapIdx = $state(0);
@@ -98,9 +101,11 @@
     audioUrl = URL.createObjectURL(f);
     audioName = f.name;
     mediaIsVideo = f.type.startsWith('video/');
+    mediaMissing = false;
     curTime = 0;
     const m = await putMedia(activeId, f);
     setBaseAudio(f.name, m.durationSec);
+    void requestPersist(); // keep this (possibly large) blob from being evicted
     note('media stored · ' + f.name);
   }
   function togglePlay() {
@@ -184,6 +189,10 @@
       audioUrl = got.url;
       audioName = got.meta.name;
       mediaIsVideo = got.meta.type.startsWith('video/');
+    } else if (meta.base.audio) {
+      // referenced but not on this device → offer to re-attach
+      mediaMissing = true;
+      audioName = meta.base.audio.fileName;
     }
   });
 
@@ -249,7 +258,11 @@
         <label class="file"
           >load media <input type="file" accept="audio/*,video/*" onchange={onFile} /></label
         >
-        {#if audioName}<span class="hint">{audioName}</span>{/if}
+        {#if mediaMissing}
+          <span class="miss" title="Imported without its media — pick the file to attach it on this device"
+            >⚠ “{audioName}” isn't on this device — load it to play / sync</span
+          >
+        {:else if audioName}<span class="hint">{audioName}</span>{/if}
       </div>
       {#if audioUrl}
         {#if mediaIsVideo}
@@ -405,6 +418,10 @@
   }
   .file input {
     max-width: 180px;
+  }
+  .miss {
+    color: #ffcf6b;
+    font-size: 0.82rem;
   }
   .vid {
     width: 100%;

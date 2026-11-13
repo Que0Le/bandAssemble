@@ -5,7 +5,7 @@
   // Media is optional here — it can be attached later — and only the Maestro needs it.
   import { onDestroy } from 'svelte';
   import { createProject, loadProject, saveProject, setLastOpened } from '../lib/projects';
-  import { putMedia } from '../lib/media';
+  import { putMedia, requestPersist } from '../lib/media';
   import { parseSheet, autoTime } from '../lib/parseSheet';
 
   let step = $state(1);
@@ -57,7 +57,10 @@
       p.base.lengthSec = Math.round((durationSec || lastEnd) * 100) / 100;
       if (mediaFile) p.base.audio = { fileName: mediaFile.name, durationSec: p.base.lengthSec };
       saveProject(p);
-      if (mediaFile) await putMedia(id, mediaFile);
+      if (mediaFile) {
+        await putMedia(id, mediaFile);
+        void requestPersist(); // keep the stored media from being evicted
+      }
       setLastOpened(id);
       // hand off to the Editor to sync
       location.search = `?seat=editor&project=${encodeURIComponent(id)}`;

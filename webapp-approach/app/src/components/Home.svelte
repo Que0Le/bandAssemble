@@ -10,15 +10,29 @@
     deleteProject,
     renameProject,
     exportProjectFile,
+    exportBundle,
     importProjectFromText,
+    importBundle,
+    looksLikeBundle,
     type ProjectMeta,
   } from '../lib/projects';
-  import { storageEstimate, requestPersist } from '../lib/media';
+  import { storageEstimate, requestPersist, hasMedia } from '../lib/media';
 
   let projects = $state<ProjectMeta[]>(listProjects());
   function refresh() {
     projects = listProjects();
+    void refreshMedia();
   }
+
+  // Which projects actually have their media blob on THIS device. A project that
+  // names an audio file but isn't in this set was imported/duplicated text-only —
+  // the media must be re-attached here (in the Editor) before it can play.
+  let mediaIds = $state<Set<string>>(new Set());
+  async function refreshMedia() {
+    const ids = await Promise.all(projects.map(async (p) => ((await hasMedia(p.id)) ? p.id : '')));
+    mediaIds = new Set(ids.filter(Boolean));
+  }
+  const mediaMissing = (p: ProjectMeta) => !!p.audioName && !mediaIds.has(p.id);
 
   // open a project → the seat chooser (?project=<id>, no seat yet)
   function open(id: string) {
@@ -40,7 +54,8 @@
     const f = input.files?.[0];
     if (!f) return;
     try {
-      const id = importProjectFromText(await f.text());
+      const text = await f.text();
+      const id = looksLikeBundle(text) ? await importBundle(text) : importProjectFromText(text);
       open(id);
     } catch (err) {
       note((err as Error).message);
@@ -85,6 +100,7 @@
     } catch {
       persisted = null;
     }
+    await refreshMedia();
   });
   async function keepStorage() {
     persisted = await requestPersist();
@@ -115,7 +131,7 @@
     <div class="grow"></div>
     {#if est}
       <span class="meter" title="Local storage used on this device">
-        {mb(est.usage)} used{#if est.quota} · {mb(est.quota)} free{/if}
+        {mb(est.usage)} used{#if est.quota} · {mb(Math.max(0, est.quota - est.usage))} free{/if}
       </span>
       {#if persisted === false}
         <button class="btn" onclick={keepStorage} title="Ask the browser not to evict your projects"
@@ -123,8 +139,8 @@
         >
       {/if}
     {/if}
-    <label class="btn import" title="Import a .band.json project (added as a new project)">
-      ⤒ Import file<input type="file" accept="application/json,.json" onchange={onImport} />
+    <label class="btn import" title="Import a .band.json project or a .bandpack bundle (added as a new project)">
+      ⤒ Import file<input type="file" accept="application/json,.json,.bandpack" onchange={onImport} />
     </label>
     <a class="btn primary" href="?new=1">＋ New project</a>
   </div>
@@ -159,13 +175,17 @@
               {when(p.updatedAt)}
               {#if p.lengthSec}· ⏱ {dur(p.lengthSec)}{/if}
               {#if p.audioName}· 🎵 {p.audioName}{/if}
+              {#if mediaMissing(p)}<span class="warn" title="The audio isn't stored on this device — open the project and re-attach it (⤒ load media) to play.">· ⚠ media not on this device</span>{/if}
             </span>
           </div>
           <div class="acts">
             <button class="ic" title="Open" onclick={() => open(p.id)}>Open</button>
             <button class="ic" title="Rename" onclick={() => startRename(p)}>✎</button>
             <button class="ic" title="Duplicate" onclick={() => dup(p.id)}>⎘</button>
-            <button class="ic" title="Export .band.json" onclick={() => exportProjectFile(p.id)}>⤓</button>
+            <button class="ic" title="Export project only (.band.json)" onclick={() => exportProjectFile(p.id)}>⤓</button>
+            {#if mediaIds.has(p.id)}
+              <button class="ic" title="Export with media (.bandpack) — for moving to another device" onclick={() => exportBundle(p.id)}>⇪</button>
+            {/if}
             <button class="ic danger" title="Delete" onclick={() => del(p)}>✕</button>
           </div>
         </li>
@@ -260,6 +280,9 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .warn {
+    color: #ffcf6b;
   }
   .acts {
     display: flex;

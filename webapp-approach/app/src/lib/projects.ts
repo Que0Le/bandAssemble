@@ -5,7 +5,8 @@
 
 import { PROJECT } from './model';
 import type { Project } from './model';
-import { deleteMedia } from './media';
+import { deleteMedia, getMediaBlob, putMediaBlob } from './media';
+import type { MediaMeta } from './media';
 
 const INDEX_KEY = 'bandassemble:index';
 const LAST_KEY = 'bandassemble:last';
@@ -151,13 +152,82 @@ export function importProjectFromText(text: string): string {
 export function exportProjectFile(id: string): void {
   const p = loadProject(id);
   if (!p) return;
-  const blob = new Blob([JSON.stringify(p, null, 2)], { type: 'application/json' });
+  download(new Blob([JSON.stringify(p, null, 2)], { type: 'application/json' }), slug(p.title) + '.band.json');
+}
+
+// --- .bandpack: a project bundled WITH its media, for moving between your own
+// devices. It's a JSON wrapper { format, version, project, media? } where the
+// media blob rides along base64-encoded. Plain .band.json stays text-only. ---
+
+interface Bundle {
+  format: 'bandpack';
+  version: 1;
+  project: Project;
+  media?: MediaMeta & { dataBase64: string };
+}
+
+function isBundle(o: unknown): o is Bundle {
+  const b = o as Bundle | null;
+  return !!b && b.format === 'bandpack' && isProject(b.project);
+}
+
+/** Detect whether a file's text is a .bandpack bundle (vs a plain .band.json). */
+export function looksLikeBundle(text: string): boolean {
+  try {
+    return isBundle(JSON.parse(text));
+  } catch {
+    return false;
+  }
+}
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => {
+      const s = fr.result as string; // "data:<type>;base64,<payload>"
+      resolve(s.slice(s.indexOf(',') + 1));
+    };
+    fr.onerror = () => reject(fr.error ?? new Error('read failed'));
+    fr.readAsDataURL(blob);
+  });
+}
+function base64ToBlob(b64: string, type: string): Blob {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type });
+}
+
+function download(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = slug(p.title) + '.band.json';
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+/** Download a project AND its stored media as one .bandpack file. */
+export async function exportBundle(id: string): Promise<void> {
+  const p = loadProject(id);
+  if (!p) return;
+  const bundle: Bundle = { format: 'bandpack', version: 1, project: p };
+  const m = await getMediaBlob(id);
+  if (m) bundle.media = { ...m.meta, dataBase64: await blobToBase64(m.blob) };
+  download(new Blob([JSON.stringify(bundle)], { type: 'application/json' }), slug(p.title) + '.bandpack');
+}
+
+/** Import a .bandpack as a NEW project (never clobbering), restoring its media
+ *  into IndexedDB. Returns the new id. Throws on bad input. */
+export async function importBundle(text: string): Promise<string> {
+  const b = JSON.parse(text);
+  if (!isBundle(b)) throw new Error('Not a bandAssemble bundle (.bandpack).');
+  const id = importProject(b.project);
+  if (b.media) {
+    const { dataBase64, ...meta } = b.media;
+    await putMediaBlob(id, base64ToBlob(dataBase64, meta.type), meta);
+  }
+  return id;
 }
 
 export async function deleteProject(id: string): Promise<void> {
