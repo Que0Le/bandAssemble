@@ -20,7 +20,7 @@
   // STILL while you read it, and turn one page only once the active line has read
   // 1/3 of the way down the RIGHT page — so there's always a full page of look-ahead.
   const GAP = 32; // must match .pages column-gap
-  const EASE = 0.1; // glide speed (0..1 per frame); lower = slower
+  const EASE = 0.05; // glide speed (0..1 per frame); lower = slower
   const TURN_AT = 1 / 3; // turn the page once the active line is this far down the right page
   let pagesW = $state(0); // inner width of the column area (no horizontal padding)
   let chartEl = $state<HTMLElement | undefined>(undefined);
@@ -55,24 +55,28 @@
     const ac = Math.max(0, Math.round((er.left - pr.left) / step)); // active page
     const vf = pr.height > 0 ? (er.top - pr.top) / pr.height : 0; // how far down it
     const rel = ac - viewCol; // 0 = active on left page, 1 = on right page
-    if (rel < 0 || rel >= 2) {
-      viewCol = ac; // seeked outside the spread → put the active line on the left page
-    } else if (rel === 1 && vf >= TURN_AT) {
+    const seek = Math.abs(ph - lastPh) > 0.08; // a jump: section chip, dbl-click, restart
+    // "follow" = keep the active line in view. Always on a seek or while paused; while
+    // playing, only when auto-scroll is on. With auto-scroll off (e.g. a vocalist with
+    // hands free) the page holds and they turn it by hand — but a seek still scrolls.
+    const follow = seek || view.autoScroll || s.uiState !== 'playing';
+    if (seek || (follow && (rel < 0 || rel >= 2))) {
+      viewCol = ac; // jump to the active line, or resync if it drifted off the spread
+    } else if (follow && rel === 1 && vf >= TURN_AT) {
       viewCol = ac; // read 1/3 into the right page → turn one page (it becomes the left)
     }
     const max = Math.max(0, chartEl.scrollWidth - chartEl.clientWidth);
     targetLeft = Math.min(viewCol * step, max);
-    // Drive the glide HERE, off the playhead, not a private rAF loop: this effect is
-    // fed by the session's hybrid rAF+watchdog driver, so the scroll keeps easing
-    // even in an unfocused window (where a bare rAF would stall — the same reason the
-    // playhead uses that driver). Each playhead tick eases scrollLeft one step toward
-    // the target page. When paused the playhead is still, so hand-paging is never
-    // fought; a real seek (meaningful jump) snaps to its page.
-    if (s.uiState === 'playing') {
+    // Apply. A seek always scrolls to the location (even with auto-scroll off). While
+    // playing with auto-scroll on, ease toward the target page — driven HERE off the
+    // playhead (fed by the session's hybrid rAF+watchdog driver) so the glide keeps
+    // running even in an unfocused window, where a bare rAF would stall. Otherwise
+    // leave the view put, so hand-scrolling / manual paging is never fought.
+    if (seek) {
+      chartEl.scrollTo({ left: targetLeft, behavior: 'smooth' });
+    } else if (s.uiState === 'playing' && view.autoScroll) {
       const d = targetLeft - chartEl.scrollLeft;
       if (Math.abs(d) > 0.5) chartEl.scrollLeft += d * EASE;
-    } else if (Math.abs(ph - lastPh) > 0.08) {
-      chartEl.scrollTo({ left: targetLeft, behavior: 'smooth' });
     }
     lastPh = ph;
   });
@@ -131,7 +135,7 @@
     <div class="stage">
       <div
         class="chart"
-        class:playing={s.uiState === 'playing'}
+        class:locked={s.uiState === 'playing' && view.autoScroll}
         bind:this={chartEl}
       >
         <div
@@ -238,8 +242,8 @@
     -webkit-mask-image: linear-gradient(90deg, transparent, #000 2%, #000 98%, transparent);
     mask-image: linear-gradient(90deg, transparent, #000 2%, #000 98%, transparent);
   }
-  .chart.playing {
-    overflow-x: hidden; /* the music drives the page; no hand-scroll while playing */
+  .chart.locked {
+    overflow-x: hidden; /* auto-scroll on: the music drives the page, no hand-scroll */
   }
   /* CSS multi-column: content fills one column top-to-bottom, then the next to the
      right, extending the strip horizontally into pages. */

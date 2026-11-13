@@ -40,6 +40,14 @@
   {/if}
   <span class="spacer"></span>
   {#if !view.editing}
+    <button
+      class="btn"
+      class:on={view.autoScroll}
+      onclick={() => (view.autoScroll = !view.autoScroll)}
+      title="Auto-scroll pages while playing. Turn off to flip pages by hand — jumping to a section still scrolls."
+    >
+      {view.autoScroll ? '⇅ Auto-scroll: on' : '⇅ Auto-scroll: off'}
+    </button>
     <span class="hint">Select any text to copy — or</span>
     <button class="btn" onclick={copySheet}>{copied ? '✓ Copied' : '⧉ Copy sheet'}</button>
   {/if}
@@ -93,5 +101,10 @@
   }
   .btn:hover {
     border-color: #4fd1c5;
+  }
+  .btn.on {
+    color: #bdf0cf;
+    border-color: #2f6b45;
+    background: #16271f;
   }
 </style>

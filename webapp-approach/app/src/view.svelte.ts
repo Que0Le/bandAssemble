@@ -48,9 +48,10 @@ function restore(): Snapshot {
 const seeded = restore();
 
 export const meta = $state(seeded.meta);
-export const view = $state<{ roleId: string; editing: boolean }>({
+export const view = $state<{ roleId: string; editing: boolean; autoScroll: boolean }>({
   roleId: seeded.roles[0]?.id ?? PROJECT.roles[0].id,
   editing: false,
+  autoScroll: true, // auto-turn pages while playing; off = flip by hand (seeks still scroll)
 });
 export const roles = $state<Role[]>(seeded.roles);
 export const charts = $state<Record<string, SongObject[]>>(seeded.charts);
