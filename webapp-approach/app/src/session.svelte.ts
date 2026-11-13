@@ -23,7 +23,6 @@ export const SEAT: Mode | null =
   seatParam === 'maestro' || seatParam === 'player' || seatParam === 'editor' ? seatParam : null;
 const SESSION_ID = params.get('session') || 'spike';
 const DEVICE_ID = Math.random().toString(36).slice(2, 8);
-const CHORUS_LOOP: LoopRange = { fromSec: 24, toSec: 40 };
 
 interface Follow {
   state: 'playing' | 'paused';
@@ -235,9 +234,24 @@ export class Session {
   }
   toggleLoop(on: boolean) {
     if (this.seat !== 'maestro') return;
-    this.loop = on ? CHORUS_LOOP : null;
+    this.loop = on ? this.currentSection() : null;
     this.loopOn = on;
     this.broadcast();
+  }
+
+  // The section around the current playhead: [this label, next label or end].
+  private currentSection(): LoopRange {
+    const ls = labels(meta.base.lyrics);
+    const head = this.audio!.playheadSec();
+    let from = 0;
+    let to = meta.base.lengthSec;
+    for (let i = 0; i < ls.length; i++) {
+      if (ls[i].atSec <= head) {
+        from = ls[i].atSec;
+        to = i < ls.length - 1 ? ls[i + 1].atSec : meta.base.lengthSec;
+      } else break;
+    }
+    return { fromSec: from, toSec: to };
   }
   toggleMetronome(on: boolean) {
     if (this.audio) this.audio.metronome = on;

@@ -4,8 +4,8 @@
   import RoleChooser from './components/RoleChooser.svelte';
   import TransportPanel from './components/TransportPanel.svelte';
   import Chart from './components/Chart.svelte';
-  import MasterControls from './components/MasterControls.svelte';
-  import ClientControls from './components/ClientControls.svelte';
+  import MaestroControls from './components/MaestroControls.svelte';
+  import PlayerControls from './components/PlayerControls.svelte';
   import Editor from './components/Editor.svelte';
 
   onMount(() => session?.start());
@@ -32,9 +32,9 @@
         <h2>Transport</h2>
         <TransportPanel />
         {#if SEAT === 'maestro'}
-          <MasterControls />
+          <MaestroControls />
         {:else}
-          <ClientControls />
+          <PlayerControls />
         {/if}
       </div>
       <div class="panel">

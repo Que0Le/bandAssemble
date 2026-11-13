@@ -1,23 +1,14 @@
 <script lang="ts">
   import { session } from '../session.svelte';
   import { objectIndexAt, nextStart } from '../lib/model';
-  import { view, currentObjects, roles, addRole, cloneInto, cloneSources, meta } from '../view.svelte';
+  import { view, currentObjects, roles, cloneInto, cloneSources, meta } from '../view.svelte';
   import { chordSvg } from '../lib/chordDiagram';
-  import { sheet } from '../lib/serialize';
-  import { copyText } from '../lib/clipboard';
   import ObjectView from './ObjectView.svelte';
   import ChartEdit from './ChartEdit.svelte';
+  import ChartToolbar from './ChartToolbar.svelte';
   const s = session!;
   const objects = $derived(currentObjects());
   const roleLabel = $derived(roles.find((r) => r.id === view.roleId)?.label ?? view.roleId);
-
-  let newRole = $state('');
-  function addRoleNow() {
-    const id = addRole(newRole);
-    newRole = '';
-    view.editing = false;
-    view.roleId = id;
-  }
 
   let chartH = $state(360);
   let els = $state<HTMLElement[]>([]);
@@ -60,43 +51,9 @@
     tip = { x: r.left + r.width / 2, y: r.top, name: chord, html: chordSvg(chord) ?? '' };
   }
   const hideTip = () => (tip = null);
-
-  // Copy the whole arrangement as a plain-text chord sheet.
-  let copied = $state(false);
-  let copyTimer: ReturnType<typeof setTimeout> | undefined;
-  async function copySheet() {
-    const ok = await copyText(sheet(meta.title, objects));
-    copied = ok;
-    clearTimeout(copyTimer);
-    copyTimer = setTimeout(() => (copied = false), 1600);
-  }
 </script>
 
-<div class="toolbar">
-  <label class="role-pick"
-    >Role
-    <select bind:value={view.roleId}>
-      {#each roles as r}<option value={r.id}>{r.label}</option>{/each}
-    </select>
-  </label>
-  <input
-    class="new-role"
-    placeholder="+ role"
-    bind:value={newRole}
-    onkeydown={(e) => e.key === 'Enter' && newRole.trim() && addRoleNow()}
-  />
-  {#if newRole.trim()}
-    <button class="copy-btn" onclick={addRoleNow}>Add</button>
-  {/if}
-  <span class="spacer"></span>
-  {#if !view.editing}
-    <span class="hint">Select any text to copy — or</span>
-    <button class="copy-btn" onclick={copySheet}>{copied ? '✓ Copied' : '⧉ Copy sheet'}</button>
-  {/if}
-  <button class="copy-btn" onclick={() => (view.editing = !view.editing)}>
-    {view.editing ? '✕ Close' : '✎ Edit'}
-  </button>
-</div>
+<ChartToolbar />
 
 {#if view.editing}
   <ChartEdit />
@@ -151,44 +108,6 @@
 {/if}
 
 <style>
-  .toolbar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 8px;
-    user-select: none;
-  }
-  .toolbar .spacer {
-    flex: 1;
-  }
-  .toolbar .hint {
-    color: #8b93a3;
-    font-size: 0.78rem;
-  }
-  .role-pick {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.78rem;
-    color: #8b93a3;
-  }
-  .role-pick select {
-    background: #0f1218;
-    color: #e6edf3;
-    border: 1px solid #2a3340;
-    border-radius: 8px;
-    padding: 4px 8px;
-    font-size: 0.82rem;
-  }
-  .new-role {
-    width: 90px;
-    background: #0f1218;
-    color: #e6edf3;
-    border: 1px solid #2a3340;
-    border-radius: 8px;
-    padding: 4px 8px;
-    font-size: 0.82rem;
-  }
   .empty {
     height: 56vh;
     display: flex;
@@ -224,18 +143,6 @@
     font-size: 0.95rem;
   }
   .clone-btn:hover {
-    border-color: #4fd1c5;
-  }
-  .copy-btn {
-    cursor: pointer;
-    color: #cfe8ff;
-    background: #182230;
-    border: 1px solid #2a3b4e;
-    border-radius: 8px;
-    padding: 5px 12px;
-    font-size: 0.82rem;
-  }
-  .copy-btn:hover {
     border-color: #4fd1c5;
   }
   .chart {
