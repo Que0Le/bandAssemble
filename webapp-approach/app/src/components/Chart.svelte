@@ -155,10 +155,6 @@
           {/each}
         </div>
       </div>
-      {#if s.uiState !== 'playing'}
-        <button class="pager left" title="Previous page (←)" onclick={() => flip(-1)}>‹</button>
-        <button class="pager right" title="Next page (→)" onclick={() => flip(1)}>›</button>
-      {/if}
     </div>
   {/if}
 </div>
@@ -271,37 +267,6 @@
   .obj.active {
     background: rgba(79, 209, 197, 0.08);
     border-left-color: rgba(79, 209, 197, 0.55);
-  }
-
-  .pager {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 34px;
-    height: 56px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.4rem;
-    cursor: pointer;
-    color: #cfd6e2;
-    background: rgba(18, 24, 32, 0.9);
-    border: 1px solid #2a3b4e;
-    border-radius: 10px;
-    opacity: 0; /* reveal on hover so they don't cover lyrics while reading */
-    transition: opacity 0.15s linear;
-  }
-  .stage:hover .pager {
-    opacity: 1;
-  }
-  .pager:hover {
-    border-color: #4fd1c5;
-  }
-  .pager.left {
-    left: 8px;
-  }
-  .pager.right {
-    right: 8px;
   }
 
   .chord-tip {
