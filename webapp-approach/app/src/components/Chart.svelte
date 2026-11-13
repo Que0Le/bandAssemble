@@ -16,10 +16,12 @@
   // whole part becomes a wide strip of fixed-height pages. We show two pages at a
   // time and the strip only moves when the music crosses from one page into the
   // next: the finished page glides off the left, the next page is revealed on the
-  // right ("dwell, then glide"). No per-line scrolling. The active line is kept on
-  // the LEFT page, so the RIGHT page is always a look-ahead.
+  // right ("dwell, then glide"). No per-line scrolling. We keep the current spread
+  // STILL while you read it, and turn one page only once the active line has read
+  // 1/3 of the way down the RIGHT page — so there's always a full page of look-ahead.
   const GAP = 32; // must match .pages column-gap
   const EASE = 0.1; // glide speed (0..1 per frame); lower = slower
+  const TURN_AT = 1 / 3; // turn the page once the active line is this far down the right page
   let pagesW = $state(0); // inner width of the column area (no horizontal padding)
   let chartEl = $state<HTMLElement | undefined>(undefined);
   let pagesEl = $state<HTMLElement | undefined>(undefined);
@@ -32,13 +34,15 @@
 
   const idx = $derived(objectIndexAt(objects, s.playhead));
 
-  // Column (page) index that the active object lives in, in content space.
-  let committedCol = 0;
+  // Leftmost visible page. The spread [viewCol, viewCol+1] holds still while you
+  // read; we only advance it when the music crosses a threshold (below).
+  let viewCol = 0;
   let targetLeft = $state(0);
 
-  // Pick the target page whenever the playhead moves (every frame while playing,
-  // once per seek). We read the active element's real x rather than assume a page
-  // width in objects, because page breaks depend on measured heights.
+  // Decide the target page whenever the playhead moves (every frame while playing,
+  // once per seek). We measure the active line's real position: which column it is
+  // in (ac) and how far down that column it has read (vf, 0 = top … 1 = bottom),
+  // because page breaks depend on measured heights, not object counts.
   let lastPh = -1;
   $effect(() => {
     const ph = s.playhead; // dep: re-run as the playhead advances
@@ -46,31 +50,31 @@
     void pagesW;
     const el = els[idx];
     if (!chartEl || !pagesEl || idx < 0 || !el || step <= 0) return;
-    const x = el.getBoundingClientRect().left - pagesEl.getBoundingClientRect().left;
-    committedCol = Math.max(0, Math.round(x / step));
+    const pr = pagesEl.getBoundingClientRect();
+    const er = el.getBoundingClientRect();
+    const ac = Math.max(0, Math.round((er.left - pr.left) / step)); // active page
+    const vf = pr.height > 0 ? (er.top - pr.top) / pr.height : 0; // how far down it
+    const rel = ac - viewCol; // 0 = active on left page, 1 = on right page
+    if (rel < 0 || rel >= 2) {
+      viewCol = ac; // seeked outside the spread → put the active line on the left page
+    } else if (rel === 1 && vf >= TURN_AT) {
+      viewCol = ac; // read 1/3 into the right page → turn one page (it becomes the left)
+    }
     const max = Math.max(0, chartEl.scrollWidth - chartEl.clientWidth);
-    targetLeft = Math.min(committedCol * step, max);
-    // While playing, the ease loop below glides toward targetLeft. While paused we
-    // must NOT re-assert the page every frame or hand-paging gets yanked back — only
-    // follow a real seek (a meaningful jump in the playhead), not frame jitter.
-    if (s.uiState !== 'playing' && Math.abs(ph - lastPh) > 0.08) {
+    targetLeft = Math.min(viewCol * step, max);
+    // Drive the glide HERE, off the playhead, not a private rAF loop: this effect is
+    // fed by the session's hybrid rAF+watchdog driver, so the scroll keeps easing
+    // even in an unfocused window (where a bare rAF would stall — the same reason the
+    // playhead uses that driver). Each playhead tick eases scrollLeft one step toward
+    // the target page. When paused the playhead is still, so hand-paging is never
+    // fought; a real seek (meaningful jump) snaps to its page.
+    if (s.uiState === 'playing') {
+      const d = targetLeft - chartEl.scrollLeft;
+      if (Math.abs(d) > 0.5) chartEl.scrollLeft += d * EASE;
+    } else if (Math.abs(ph - lastPh) > 0.08) {
       chartEl.scrollTo({ left: targetLeft, behavior: 'smooth' });
     }
     lastPh = ph;
-  });
-
-  // Ease loop: while playing, glide scrollLeft toward the target page. Runs once
-  // (no reactive deps read at setup); reads live values each frame. When paused it
-  // does nothing, so hand-scrolling is never fought.
-  $effect(() => {
-    let raf = requestAnimationFrame(function tick() {
-      if (chartEl && s.uiState === 'playing') {
-        const d = targetLeft - chartEl.scrollLeft;
-        if (Math.abs(d) > 0.5) chartEl.scrollLeft += d * EASE;
-      }
-      raf = requestAnimationFrame(tick);
-    });
-    return () => cancelAnimationFrame(raf);
   });
 
   // Double-click a line/label to jump the whole band there. (Single-click and
