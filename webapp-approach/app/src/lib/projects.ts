@@ -133,6 +133,33 @@ export function duplicateProject(id: string): string | null {
   return newId;
 }
 
+export function renameProject(id: string, title: string): void {
+  const p = loadProject(id);
+  if (!p) return;
+  p.title = title.trim() || p.title;
+  saveProject(p);
+}
+
+/** Parse + validate project text and import it as a new project. Throws on bad input. */
+export function importProjectFromText(text: string): string {
+  const p = JSON.parse(text) as Project;
+  if (!isProject(p)) throw new Error('Not a bandAssemble project file (schemaVersion 3).');
+  return importProject(p);
+}
+
+/** Download one project (by id) as a .band.json file. Text only — no media. */
+export function exportProjectFile(id: string): void {
+  const p = loadProject(id);
+  if (!p) return;
+  const blob = new Blob([JSON.stringify(p, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = slug(p.title) + '.band.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export async function deleteProject(id: string): Promise<void> {
   remove(projectKey(id));
   writeIndex(readIndex().filter((e) => e.id !== id));

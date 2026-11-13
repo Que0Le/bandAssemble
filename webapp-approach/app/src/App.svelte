@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { session, SEAT } from './session.svelte';
+  import Home from './components/Home.svelte';
   import RoleChooser from './components/RoleChooser.svelte';
   import TransportPanel from './components/TransportPanel.svelte';
   import Chart from './components/Chart.svelte';
@@ -9,6 +10,10 @@
   import Editor from './components/Editor.svelte';
 
   onMount(() => session?.start());
+
+  // Landing: no seat AND no project chosen → the project list (Home). With a
+  // project but no seat → the seat picker. A seat → the app for that project.
+  const hasProject = new URLSearchParams(location.search).has('project');
 </script>
 
 <header>
@@ -20,7 +25,9 @@
   {/if}
 </header>
 
-{#if !SEAT}
+{#if !SEAT && !hasProject}
+  <Home />
+{:else if !SEAT}
   <RoleChooser />
 {:else if SEAT === 'editor'}
   <Editor />
