@@ -270,16 +270,24 @@
             class="vid"
             bind:this={mediaEl}
             src={audioUrl}
+            controls
+            playsinline
+            preload="auto"
             ontimeupdate={() => (curTime = mediaEl ? mediaEl.currentTime : 0)}
+            onseeked={() => (curTime = mediaEl ? mediaEl.currentTime : 0)}
             onplay={() => (playing = true)}
             onpause={() => (playing = false)}
             onended={() => (playing = false)}
           ></video>
         {:else}
           <audio
+            class="aud"
             bind:this={mediaEl}
             src={audioUrl}
+            controls
+            preload="auto"
             ontimeupdate={() => (curTime = mediaEl ? mediaEl.currentTime : 0)}
+            onseeked={() => (curTime = mediaEl ? mediaEl.currentTime : 0)}
             onplay={() => (playing = true)}
             onpause={() => (playing = false)}
             onended={() => (playing = false)}
@@ -424,9 +432,13 @@
   }
   .vid {
     width: 100%;
-    max-height: 220px;
+    max-height: 360px;
     background: #000;
     border-radius: 8px;
+    margin-top: 6px;
+  }
+  .aud {
+    width: 100%;
     margin-top: 6px;
   }
   .tap-row {
