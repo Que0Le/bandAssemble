@@ -302,8 +302,9 @@
         <p class="hint next">
           {#if tapIdx < objects.length}
             Next tap → #{tapIdx + 1}: <span class="nx">{preview(objects[tapIdx])}</span>
+            <span class="dim">· click any line to jump here</span>
           {:else}
-            all {objects.length} stamped
+            all {objects.length} stamped <span class="dim">· click any line to re-tap it</span>
           {/if}
         </p>
       {:else}
@@ -314,7 +315,14 @@
         {#each objects as o, i (o.id)}
           <div class="trow" class:on={i === activeIdx} class:next={i === tapIdx}>
             <span class="k {o.type}">{o.type}</span>
-            <span class="c">{preview(o)}</span>
+            <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+            <span
+              class="c"
+              role="button"
+              tabindex="-1"
+              title="Click to make this the next tap, then press space"
+              onclick={() => (tapIdx = i)}>{preview(o)}</span
+            >
             <input
               class="t"
               type="number"
@@ -457,6 +465,9 @@
   .next .nx {
     color: #ffcf6b;
   }
+  .dim {
+    color: #6b7482;
+  }
   .tbl {
     margin-top: 10px;
     max-height: 300px;
@@ -501,6 +512,11 @@
     white-space: nowrap;
     color: #d6dde8;
     font-size: 0.9rem;
+    cursor: pointer;
+  }
+  .c:hover {
+    color: #fff;
+    text-decoration: underline dotted #4fd1c5;
   }
   .t {
     width: 100%;
