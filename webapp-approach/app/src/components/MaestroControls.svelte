@@ -1,9 +1,6 @@
 <script lang="ts">
   import { session } from '../session.svelte';
-  import { labels } from '../lib/model';
-  import { meta } from '../view.svelte';
   const s = session!;
-  const marks = labels(meta.base.lyrics);
 
   async function onFile(e: Event) {
     const f = (e.target as HTMLInputElement).files?.[0];
@@ -11,11 +8,6 @@
   }
 </script>
 
-<div class="row">
-  <button class="btn" onclick={() => s.maestroPlay()}>▶ Play</button>
-  <button class="btn" onclick={() => s.maestroPause()}>⏸ Pause</button>
-  <button class="btn" onclick={() => s.restart()}>⏮ Restart</button>
-</div>
 <div class="row">
   <label>
     rate
@@ -45,10 +37,4 @@
     /> metronome
   </label>
   <label>load audio <input type="file" accept="audio/*" onchange={onFile} /></label>
-</div>
-<p class="hint">Markers (click to jump everyone):</p>
-<div class="markers">
-  {#each marks as m}
-    <button class="btn" onclick={() => s.seek(m.atSec)}>{m.label} ({m.atSec}s)</button>
-  {/each}
 </div>

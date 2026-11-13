@@ -5,7 +5,7 @@
   import TransportPanel from './components/TransportPanel.svelte';
   import Chart from './components/Chart.svelte';
   import MaestroControls from './components/MaestroControls.svelte';
-  import PlayerControls from './components/PlayerControls.svelte';
+  import TransportBar from './components/TransportBar.svelte';
   import Editor from './components/Editor.svelte';
 
   onMount(() => session?.start());
@@ -33,8 +33,6 @@
         <TransportPanel />
         {#if SEAT === 'maestro'}
           <MaestroControls />
-        {:else}
-          <PlayerControls />
         {/if}
       </div>
       <div class="panel">
@@ -43,4 +41,5 @@
       </div>
     </div>
   </section>
+  <TransportBar />
 {/if}
