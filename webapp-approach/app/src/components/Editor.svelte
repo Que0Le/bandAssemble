@@ -66,7 +66,12 @@
   let mediaMissing = $state(false);
   let playing = $state(false);
   let curTime = $state(0);
-  let tapIdx = $state(0);
+  // The line currently being timed (the highlighted row). Click a row, or N/P,
+  // to move it; S/E stamp start/end onto it. No auto-advance.
+  let cur = $state(0);
+  // Lines whose END the user set explicitly with E this session — so marking the
+  // next line's start won't silently close the gap they just made. Not persisted.
+  let explicitEnd = new Set<number>();
 
   let copied = $state('');
   let flash: ReturnType<typeof setTimeout> | undefined;
@@ -82,13 +87,15 @@
   // structural text change, then re-tap). Loading a target preserves its times.
   function parse() {
     objects = autoTime(parseSheet(sheet));
-    tapIdx = 0;
+    cur = 0;
+    explicitEnd = new Set();
     note('parsed ' + objects.length + ' objects');
   }
   function loadRole() {
     sheet = sheetFor(roleId);
     objects = reTime(parseSheet(sheet), storedObjs(roleId));
-    tapIdx = 0;
+    cur = 0;
+    explicitEnd = new Set();
     note('loaded ' + (isBase ? 'Base' : roleId));
   }
 
@@ -116,33 +123,62 @@
     if (mediaEl) mediaEl.currentTime = Math.max(0, sec);
   }
 
-  // Stamp the next object's start at the current audio time; close the previous.
-  function tap() {
-    if (tapIdx >= objects.length) return;
-    const tt = r2(mediaEl ? mediaEl.currentTime : curTime);
-    objects[tapIdx].startSec = tt;
-    if (tapIdx > 0) objects[tapIdx - 1].endSec = tt;
-    tapIdx++;
-    // give the last object a sensible end if we just stamped it
-    if (tapIdx === objects.length) objects[tapIdx - 1].endSec = r2(tt + 3);
+  const playhead = () => r2(mediaEl ? mediaEl.currentTime : curTime);
+
+  // S — mark the current line's START at the playhead. Keep lines contiguous by
+  // default: close the previous line here too, unless you set its end with E.
+  function markStart() {
+    if (!objects.length) return;
+    const tt = playhead();
+    objects[cur].startSec = tt;
+    if (cur > 0 && !explicitEnd.has(cur - 1) && objects[cur - 1].endSec !== tt) {
+      objects[cur - 1].endSec = tt;
+    }
+    if (objects[cur].endSec < tt) objects[cur].endSec = r2(tt + 3); // keep end ≥ start
+  }
+  // E — mark the current line's END at the playhead (use it to end a line before
+  // the next starts — an instrumental gap). Remembered so S won't overwrite it.
+  function markEnd() {
+    if (!objects.length) return;
+    objects[cur].endSec = playhead();
+    explicitEnd.add(cur);
+  }
+  // N / P — move the current line; no stamping.
+  function next() {
+    if (cur < objects.length - 1) cur++;
+  }
+  function prev() {
+    if (cur > 0) cur--;
   }
   function resetTaps() {
-    tapIdx = 0;
-    note('tap pointer reset');
+    cur = 0;
+    explicitEnd = new Set();
+    note('back to first line');
   }
 
   function onKey(e: KeyboardEvent) {
     const el = e.target as HTMLElement;
-    if (el && /^(INPUT|TEXTAREA)$/.test(el.tagName)) return;
-    if (e.code === 'Space') {
+    if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+    const k = e.key.toLowerCase();
+    if (e.code === 'Space' || k === 's') {
       e.preventDefault();
-      tap();
+      markStart();
+    } else if (k === 'e') {
+      e.preventDefault();
+      markEnd();
+    } else if (k === 'n') {
+      e.preventDefault();
+      next();
+    } else if (k === 'p') {
+      e.preventDefault();
+      prev();
     }
   }
 
   function removeObj(i: number) {
     objects = objects.filter((_, j) => j !== i);
-    if (tapIdx > objects.length) tapIdx = objects.length;
+    explicitEnd = new Set(); // indices shifted; drop the (now-stale) end marks
+    if (cur >= objects.length) cur = Math.max(0, objects.length - 1);
   }
 
   function preview(o: SongObject): string {
@@ -296,32 +332,33 @@
         <div class="row tap-row">
           <button class="btn" onclick={togglePlay}>{playing ? '⏸' : '▶'}</button>
           <b class="clock">{curTime.toFixed(2)}s</b>
-          <button class="btn tap" onclick={tap} disabled={tapIdx >= objects.length}>⏱ Tap (space)</button>
-          <button class="btn" onclick={resetTaps}>reset</button>
+          <button class="btn tap" onclick={markStart} title="Mark start of this line (space or S)">S start</button>
+          <button class="btn" onclick={markEnd} title="Mark end of this line (E)">E end</button>
+          <button class="btn" onclick={next} disabled={cur >= objects.length - 1} title="Next line (N)">N ↓</button>
+          <button class="btn" onclick={prev} disabled={cur <= 0} title="Previous line (P)">P ↑</button>
+          <button class="btn" onclick={resetTaps} title="Back to the first line">⤒ top</button>
         </div>
-        <p class="hint next">
-          {#if tapIdx < objects.length}
-            Next tap → #{tapIdx + 1}: <span class="nx">{preview(objects[tapIdx])}</span>
-            <span class="dim">· click any line to jump here</span>
-          {:else}
-            all {objects.length} stamped <span class="dim">· click any line to re-tap it</span>
-          {/if}
-        </p>
+        {#if objects.length}
+          <p class="hint next">
+            Line {cur + 1}/{objects.length}: <span class="nx">{preview(objects[cur])}</span>
+            <span class="dim">· space/S start · E end · N next · P prev · or click a line</span>
+          </p>
+        {/if}
       {:else}
         <p class="hint">Load an audio or video file to tap-to-time, or edit the seconds directly below.</p>
       {/if}
 
       <div class="tbl">
         {#each objects as o, i (o.id)}
-          <div class="trow" class:on={i === activeIdx} class:next={i === tapIdx}>
+          <div class="trow" class:on={i === activeIdx} class:cur={i === cur}>
             <span class="k {o.type}">{o.type}</span>
             <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
             <span
               class="c"
               role="button"
               tabindex="-1"
-              title="Click to make this the next tap, then press space"
-              onclick={() => (tapIdx = i)}>{preview(o)}</span
+              title="Click to make this the current line, then S / E to mark"
+              onclick={() => (cur = i)}>{preview(o)}</span
             >
             <input
               class="t"
@@ -485,7 +522,10 @@
   .trow.on {
     background: #14202b;
   }
-  .trow.next .c {
+  .trow.cur {
+    box-shadow: inset 2px 0 0 #4fd1c5;
+  }
+  .trow.cur .c {
     color: #ffcf6b;
   }
   .k {
