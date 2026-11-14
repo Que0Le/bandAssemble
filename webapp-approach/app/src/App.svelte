@@ -8,6 +8,8 @@
   import Chart from './components/Chart.svelte';
   import MaestroControls from './components/MaestroControls.svelte';
   import MaestroMedia from './components/MaestroMedia.svelte';
+  import SessionShare from './components/SessionShare.svelte';
+  import ViewModeToggle from './components/ViewModeToggle.svelte';
   import TransportBar from './components/TransportBar.svelte';
   import Editor from './components/Editor.svelte';
 
@@ -41,6 +43,7 @@
   <section class="stage">
     <div class="topbar">
       <div class="role-badge {SEAT}">{SEAT === 'maestro' ? '🎛️ MAESTRO' : '📱 PLAYER'}</div>
+      <SessionShare />
       <details class="meta">
         <summary>details</summary>
         <div class="meta-body">
@@ -48,6 +51,7 @@
           {#if SEAT === 'maestro'}
             <MaestroControls />
           {/if}
+          <ViewModeToggle />
         </div>
       </details>
     </div>
