@@ -85,11 +85,69 @@
 
   // Explicit re-parse: resets timing to a sequential placeholder (use after a
   // structural text change, then re-tap). Loading a target preserves its times.
+  // Parse the sheet box. If it holds JSON (a copied chart — array of objects, or
+  // {objects} / {title,roleId,objects}), load it verbatim so all timestamps are
+  // kept; otherwise parse the text markup (which carries no times → placeholders).
   function parse() {
+    const trimmed = sheet.trim();
+    if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+      try {
+        loadJson(trimmed);
+      } catch (e) {
+        note('bad JSON: ' + (e as Error).message);
+      }
+      return;
+    }
     objects = autoTime(parseSheet(sheet));
     cur = 0;
     explicitEnd = new Set();
     note('parsed ' + objects.length + ' objects');
+  }
+
+  // Coerce a copied chart JSON into objects (fresh ids, numeric times preserved).
+  function objectsFromJson(text: string): SongObject[] {
+    const data: unknown = JSON.parse(text);
+    const arr = Array.isArray(data) ? data : (data as { objects?: unknown }).objects;
+    if (!Array.isArray(arr)) throw new Error('expected an array of chart objects');
+    return (arr as Record<string, unknown>[]).map((o, i) => {
+      const base = { id: 'j' + i, startSec: Number(o.startSec) || 0, endSec: Number(o.endSec) || 0 };
+      if (o.type === 'label') return { ...base, type: 'label', text: String(o.text ?? '') } as SongObject;
+      if (o.type === 'tab')
+        return {
+          ...base,
+          type: 'tab',
+          lines: Array.isArray(o.lines) ? (o.lines as unknown[]).map(String) : [],
+          ...(o.caption ? { caption: String(o.caption) } : {}),
+        } as SongObject;
+      if (o.type === 'chorddef')
+        return { ...base, type: 'chorddef', name: String(o.name ?? ''), grip: String(o.grip ?? '') } as SongObject;
+      return {
+        ...base,
+        type: 'line',
+        ...(o.kind ? { kind: String(o.kind) } : {}),
+        ...(o.text != null ? { text: String(o.text) } : {}),
+        ...(o.strum != null ? { strum: String(o.strum) } : {}),
+        ...(o.note != null ? { note: String(o.note) } : {}),
+      } as SongObject;
+    });
+  }
+  // Load objects from a JSON string (times kept) and normalize the box to markup.
+  function loadJson(text: string) {
+    const objs = objectsFromJson(text);
+    if (!objs.length) throw new Error('no objects');
+    objects = objs;
+    sheet = objectsText(objs);
+    cur = 0;
+    explicitEnd = new Set();
+    note('loaded ' + objs.length + ' objects from JSON · times kept');
+  }
+  // Read the clipboard and load it as chart JSON.
+  async function pasteJson() {
+    try {
+      loadJson(await navigator.clipboard.readText());
+    } catch (e) {
+      note('paste the JSON into the box and Parse (' + (e as Error).message + ')');
+    }
   }
   function loadRole() {
     sheet = sheetFor(roleId);
@@ -284,7 +342,8 @@
       ></textarea>
       <div class="row">
         <button class="btn" onclick={parse}>Parse → objects</button>
-        <span class="hint">Chords inline as [G]. Sections as [Verse]. Strum ↓↑×. Notes (…).</span>
+        <button class="btn" onclick={pasteJson} title="Paste a copied chart JSON from the clipboard — keeps every timestamp">⧉ Paste JSON</button>
+        <span class="hint">Chords inline as [G]. Sections [Verse]. Strum ↓↑×. Notes (…). @solo/@instrumental for parts. <b>Am7 [x02010]</b> defines a fingering. Paste JSON here (then Parse) to keep times.</span>
       </div>
     </div>
 
