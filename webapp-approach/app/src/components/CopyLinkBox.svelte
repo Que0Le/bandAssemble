@@ -6,42 +6,26 @@
   // Why a <div>, not an <input>: an <input> can't wrap, so a long LAN URL ran off
   // the field. This box wraps (word-break) and a tap selects it all (user-select).
   //
-  // Copy path: the async Clipboard API only exists in a "secure context" (https or
-  // localhost), so on a plain-http LAN IP we fall back to selecting the box and
-  // execCommand('copy'). If even that fails, the link stays selected for a manual
-  // Ctrl/Cmd+C.
+  // Copy uses the shared helper (async Clipboard API with a hidden-textarea
+  // execCommand fallback for plain-http LAN, where there's no secure context).
+  // We flash "Copied" on press regardless of the result: a real tap is a user
+  // gesture, so the copy succeeds in practice, and if it somehow doesn't,
+  // user-select:all on the box still lets a tap select the whole link to copy by hand.
+  import { copyText } from '../lib/clipboard';
+
   let { link, label = 'Copy link' }: { link: string; label?: string } = $props();
 
-  let urlEl = $state<HTMLDivElement>();
   let copied = $state(false);
 
-  function selectUrl() {
-    if (!urlEl) return;
-    const sel = window.getSelection();
-    const range = document.createRange();
-    range.selectNodeContents(urlEl);
-    sel?.removeAllRanges();
-    sel?.addRange(range);
-  }
-
   async function copy() {
-    try {
-      await navigator.clipboard.writeText(link); // https / localhost only
-    } catch {
-      try {
-        selectUrl();
-        document.execCommand('copy');
-      } catch {
-        /* nothing more to try — the link stays selected for a manual copy */
-      }
-    }
+    void copyText(link);
     copied = true;
     setTimeout(() => (copied = false), 3000);
   }
 </script>
 
 <div class="jurl">
-  <div class="urlbox" bind:this={urlEl}>{link}</div>
+  <div class="urlbox">{link}</div>
   <button class="mini" onclick={copy}>{copied ? 'Copied' : label}</button>
 </div>
 
