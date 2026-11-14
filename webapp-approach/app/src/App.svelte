@@ -213,4 +213,10 @@
     color: #6b7280;
     white-space: nowrap;
   }
+  /* Phones: the header has no room for the stamp — it stays in the details panel. */
+  @media (max-width: 640px) {
+    .build {
+      display: none;
+    }
+  }
 </style>
