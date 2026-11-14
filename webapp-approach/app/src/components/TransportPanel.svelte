@@ -19,6 +19,7 @@
     <div><span>device</span><b>{s.deviceId}</b></div>
     <div><span>session</span><b>{s.sessionId}</b></div>
   {/if}
+  <div><span>build</span><b>{__APP_BUILD__}</b></div>
   <div class="wide"><span>socket</span><b>{s.wsUrl || '—'}</b></div>
   {#if s.conn !== 'connected'}
     <div class="wide"><span>why</span><b>{s.connInfo || s.conn}</b></div>

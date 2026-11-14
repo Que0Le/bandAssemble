@@ -24,6 +24,7 @@
 
 <header>
   <h1>bandAssemble <span class="tag">svelte port</span></h1>
+  <span class="build" title="Build timestamp. If two devices show different values, one is on a stale bundle — hard-reload it.">build {__APP_BUILD__}</span>
   {#if session}
     <div class="pill" class:ok={session.conn === 'connected'} class:bad={session.conn !== 'connected'}>
       {session.conn}
@@ -149,5 +150,13 @@
   }
   .wsdiag .att {
     color: #8b93a3;
+  }
+  /* Build stamp — muted, pushed to the right so the connection pill sits beside it. */
+  .build {
+    margin-left: auto;
+    font-family: ui-monospace, monospace;
+    font-size: 0.68rem;
+    color: #6b7280;
+    white-space: nowrap;
   }
 </style>
