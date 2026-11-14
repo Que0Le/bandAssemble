@@ -1,6 +1,9 @@
-// Master-only audio engine. Owns the authoritative playhead via
-// AudioContext.currentTime, plus a lookahead metronome scheduler and optional
-// playback of a loaded recording. See ../../01-tech-stack-feasibility.md (audio).
+// Master-only clock + metronome. When a media element (the project's audio/video)
+// is attached, THAT element is the authoritative playhead and the sound/picture
+// source — so the Maestro sees the video and hears the real track, and the band
+// follows the element's currentTime. With no media attached (pure practice), we
+// fall back to a synthetic AudioContext clock and a lookahead metronome.
+// See ../../01-tech-stack-feasibility.md (audio).
 
 export class MasterAudio {
   rate = 1;
@@ -8,11 +11,10 @@ export class MasterAudio {
 
   private ctx?: AudioContext;
   private playing = false;
-  private anchorCtx = 0; // ctx.currentTime at anchor
+  private anchorCtx = 0; // ctx.currentTime at anchor (synthetic clock)
   private anchorSec = 0; // playhead seconds at anchor
   private nextClickSec = 0;
-  private buffer?: AudioBuffer;
-  private src?: AudioBufferSourceNode;
+  private el?: HTMLMediaElement; // the real recording, when present (clock + sound)
 
   constructor(private bpm: number) {}
   private get beat() {
@@ -24,7 +26,18 @@ export class MasterAudio {
     if (this.ctx.state === 'suspended') void this.ctx.resume();
   }
 
+  /** Attach (or detach with undefined) the project's media element. While attached
+   *  it is the clock and the sound — the decoded-buffer path is not used. */
+  attach(el?: HTMLMediaElement): void {
+    this.el = el;
+    if (el) el.playbackRate = this.rate;
+  }
+  get hasMedia(): boolean {
+    return !!this.el;
+  }
+
   playheadSec(): number {
+    if (this.el) return this.el.currentTime;
     if (!this.playing || !this.ctx) return this.anchorSec;
     return this.anchorSec + (this.ctx.currentTime - this.anchorCtx) * this.rate;
   }
@@ -33,12 +46,15 @@ export class MasterAudio {
     this.anchorSec = atSec;
     this.anchorCtx = this.ctx ? this.ctx.currentTime : 0;
     this.nextClickSec = Math.ceil(atSec / this.beat) * this.beat;
-    this.restartBuffer();
   }
 
   start(atSec: number): void {
     this.ensure();
     this.playing = true;
+    if (this.el) {
+      if (Math.abs(this.el.currentTime - atSec) > 0.05) this.el.currentTime = atSec;
+      void this.el.play().catch(() => {}); // play() can reject if interrupted/blocked
+    }
     this.setAnchor(atSec);
   }
 
@@ -47,51 +63,28 @@ export class MasterAudio {
     const at = this.playheadSec();
     this.playing = false;
     this.anchorSec = at;
-    if (this.src) {
-      try {
-        this.src.stop();
-      } catch {}
-      this.src = undefined;
-    }
+    if (this.el) this.el.pause();
     return at;
   }
 
   seek(atSec: number): void {
     this.anchorSec = atSec;
+    if (this.el) this.el.currentTime = atSec;
     if (this.playing) this.setAnchor(atSec);
   }
 
   setRate(rate: number): void {
     const at = this.playheadSec();
     this.rate = rate;
+    if (this.el) this.el.playbackRate = rate;
     if (this.playing) this.setAnchor(at);
   }
 
-  async loadFile(file: File): Promise<void> {
-    this.ensure();
-    this.buffer = await this.ctx!.decodeAudioData(await file.arrayBuffer());
-    if (this.playing) this.setAnchor(this.playheadSec());
-  }
-
-  private restartBuffer(): void {
-    if (this.src) {
-      try {
-        this.src.stop();
-      } catch {}
-      this.src = undefined;
-    }
-    if (!this.buffer || !this.playing || !this.ctx) return;
-    this.src = this.ctx.createBufferSource();
-    this.src.buffer = this.buffer;
-    this.src.playbackRate.value = this.rate;
-    this.src.connect(this.ctx.destination);
-    const off = Math.max(0, Math.min(this.anchorSec, this.buffer.duration - 0.01));
-    this.src.start(this.ctx.currentTime, off);
-  }
-
-  /** Call ~every 25ms while playing: schedules metronome clicks ahead on the audio thread. */
+  /** Call ~every 25ms while playing: schedules metronome clicks ahead on the audio
+   *  thread. Driven off the synthetic anchor; typically off once a real track is
+   *  attached (the recording keeps time), so it mainly serves practice mode. */
   tick(): void {
-    if (!this.ctx || !this.playing || !this.metronome) return;
+    if (!this.ctx || !this.playing || !this.metronome || this.el) return;
     const lookahead = 0.15;
     const head = this.playheadSec();
     while (this.nextClickSec < head + lookahead) {

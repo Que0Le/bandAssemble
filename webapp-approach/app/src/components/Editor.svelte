@@ -18,7 +18,7 @@
   import { parseSheet, autoTime, reTime } from '../lib/parseSheet';
   import { objectsText } from '../lib/serialize';
   import { copyText } from '../lib/clipboard';
-  import { r2 } from '../lib/util';
+  import { r2, secToClock, clockToSec } from '../lib/util';
   import ObjectView from './ObjectView.svelte';
 
   // The edit target is either the Base (lyric/timing skeleton) or a Role's chart.
@@ -104,13 +104,28 @@
     note('parsed ' + objects.length + ' objects');
   }
 
-  // Coerce a copied chart JSON into objects (fresh ids, numeric times preserved).
+  // A timestamp field: prefer the human "startMin"/"endMin" clock ("1:42") when
+  // present — that's the one you hand-annotate off a player — else the raw seconds.
+  function pickSec(clock: unknown, sec: unknown): number {
+    if (typeof clock === 'string' && clock.trim()) {
+      const c = clockToSec(clock);
+      if (Number.isFinite(c)) return r2(c);
+    }
+    return Number(sec) || 0;
+  }
+
+  // Coerce a copied chart JSON into objects (fresh ids, times preserved). Accepts
+  // either startSec/endSec (numbers) or startMin/endMin ("m:ss"/"m.ss" strings).
   function objectsFromJson(text: string): SongObject[] {
     const data: unknown = JSON.parse(text);
     const arr = Array.isArray(data) ? data : (data as { objects?: unknown }).objects;
     if (!Array.isArray(arr)) throw new Error('expected an array of chart objects');
     return (arr as Record<string, unknown>[]).map((o, i) => {
-      const base = { id: 'j' + i, startSec: Number(o.startSec) || 0, endSec: Number(o.endSec) || 0 };
+      const base = {
+        id: 'j' + i,
+        startSec: pickSec(o.startMin, o.startSec),
+        endSec: pickSec(o.endMin, o.endSec),
+      };
       if (o.type === 'label') return { ...base, type: 'label', text: String(o.text ?? '') } as SongObject;
       if (o.type === 'tab')
         return {
@@ -252,7 +267,14 @@
     note(ok ? 'sheet copied' : 'copy failed');
   }
   async function copyJson() {
-    const ok = await copyText(JSON.stringify({ title, roleId, objects }, null, 2));
+    // Emit both forms: startSec/endSec (numbers) for the app, and startMin/endMin
+    // ("m:ss" strings) to hand-annotate off a player's elapsed time.
+    const out = objects.map((o) => ({
+      ...o,
+      startMin: secToClock(o.startSec),
+      endMin: secToClock(o.endSec),
+    }));
+    const ok = await copyText(JSON.stringify({ title, roleId, objects: out }, null, 2));
     note(ok ? 'chart JSON copied' : 'copy failed');
   }
 
@@ -343,7 +365,7 @@
       <div class="row">
         <button class="btn" onclick={parse}>Parse → objects</button>
         <button class="btn" onclick={pasteJson} title="Paste a copied chart JSON from the clipboard — keeps every timestamp">⧉ Paste JSON</button>
-        <span class="hint">Chords inline as [G]. Sections [Verse]. Strum ↓↑×. Notes (…). @solo/@instrumental for parts. <b>Am7 [x02010]</b> defines a fingering. Paste JSON here (then Parse) to keep times.</span>
+        <span class="hint">Chords inline as [G]. Sections [Verse]. Strum ↓↑×. Notes (…). @solo/@instrumental for parts. <b>Am7 [x02010]</b> defines a fingering. Paste JSON here (then Parse) to keep times — <b>startMin</b>/<b>endMin</b> like "1:42" or raw startSec.</span>
       </div>
     </div>
 

@@ -13,7 +13,7 @@ import { ClockSync } from './lib/clockSync';
 import { MasterAudio } from './lib/audio';
 import { labels } from './lib/model';
 import type { SongObject } from './lib/model';
-import { charts, setChart, meta } from './view.svelte';
+import { charts, setChart, meta, activeId } from './view.svelte';
 import type { Seat, TransportMsg, PingMsg, PongMsg, LoopRange, ChartMsg } from './lib/protocol';
 
 const params = new URLSearchParams(location.search);
@@ -21,7 +21,13 @@ const seatParam = params.get('seat');
 export type Mode = 'maestro' | 'player' | 'editor';
 export const SEAT: Mode | null =
   seatParam === 'maestro' || seatParam === 'player' || seatParam === 'editor' ? seatParam : null;
-const SESSION_ID = params.get('session') || 'spike';
+// The relay session is scoped to the PROJECT: everyone on the same song shares a
+// session and syncs; different projects never cross-talk. Without this, every
+// client defaulted to one shared id, so a window open on project A broadcast its
+// charts (via distributeCharts on hello) into project B — silently overwriting
+// B's stored chart with A's. An explicit ?session= still overrides, for a
+// deliberate cross-device band where the project ids differ.
+const SESSION_ID = params.get('session') || activeId;
 const DEVICE_ID = Math.random().toString(36).slice(2, 8);
 
 interface Follow {
@@ -48,6 +54,7 @@ export class Session {
   rtt = $state(Infinity);
   lastSync = $state(0);
   detached = $state(false); // Player force-stopped locally & ignoring the band
+  songLoaded = $state(false); // Maestro: the project's recording is decoded & ready
 
   private transport: WsTransport;
   private clock: ClockSync;
@@ -259,8 +266,14 @@ export class Session {
     if (this.audio) this.audio.metronome = on;
     this.metronome = on;
   }
-  async loadFile(file: File) {
-    if (this.audio) await this.audio.loadFile(file);
+  /** Maestro only: attach (or detach) the project's media element — the real
+   *  <video>/<audio> the Maestro watches and plays. While attached it IS the clock
+   *  and the sound source; the metronome steps aside so the recording keeps time. */
+  attachMedia(el?: HTMLMediaElement) {
+    if (!this.audio) return;
+    this.audio.attach(el);
+    this.songLoaded = !!el;
+    if (el) this.toggleMetronome(false); // the real track replaces the click
   }
 
   // ---- live compute (debug/testing; independent of the rAF loop) ----

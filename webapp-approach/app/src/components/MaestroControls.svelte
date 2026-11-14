@@ -1,11 +1,6 @@
 <script lang="ts">
   import { session } from '../session.svelte';
   const s = session!;
-
-  async function onFile(e: Event) {
-    const f = (e.target as HTMLInputElement).files?.[0];
-    if (f) await s.loadFile(f);
-  }
 </script>
 
 <div class="row">
@@ -36,5 +31,4 @@
       onchange={(e) => s.toggleMetronome((e.currentTarget as HTMLInputElement).checked)}
     /> metronome
   </label>
-  <label>load audio <input type="file" accept="audio/*" onchange={onFile} /></label>
 </div>

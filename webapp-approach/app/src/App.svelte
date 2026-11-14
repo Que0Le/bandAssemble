@@ -7,6 +7,7 @@
   import TransportPanel from './components/TransportPanel.svelte';
   import Chart from './components/Chart.svelte';
   import MaestroControls from './components/MaestroControls.svelte';
+  import MaestroMedia from './components/MaestroMedia.svelte';
   import TransportBar from './components/TransportBar.svelte';
   import Editor from './components/Editor.svelte';
 
@@ -50,6 +51,9 @@
         </div>
       </details>
     </div>
+    {#if SEAT === 'maestro'}
+      <MaestroMedia />
+    {/if}
     <div class="chart-fill">
       <Chart />
     </div>
