@@ -19,11 +19,9 @@
   });
 
   function toggle() {
-    if (!isMaestro && s.detached) return s.rejoin(); // re-join after a force stop
     if (s.uiState === 'playing') isMaestro ? s.maestroPause() : s.askPause();
     else isMaestro ? s.maestroPlay() : s.askPlay();
   }
-  const forceStop = () => s.forceStop();
   const restart = () => (isMaestro ? s.restart() : s.askSeek(0));
   const goto = (atSec: number) => (isMaestro ? s.seek(atSec) : s.askSeek(atSec));
 </script>
@@ -35,9 +33,6 @@
       class:on={s.uiState === 'playing'}
       onclick={toggle}
       title={s.uiState === 'playing' ? 'Pause' : 'Play'}>{s.uiState === 'playing' ? '⏸' : '▶'}</button
-    >
-    <button class="t stop" onclick={forceStop} title="Force stop (local — if the connection drops)"
-      >⏹ Force stop</button
     >
     <button class="t" onclick={restart} title="Restart">⏮</button>
   </div>
@@ -85,17 +80,6 @@
   .t.on {
     color: #48bb78;
     border-color: #48bb78;
-  }
-  .t.stop {
-    width: auto;
-    padding: 0 12px;
-    font-size: 0.82rem;
-    color: #fca5a5;
-    background: #241619;
-    border-color: #5b2a2a;
-  }
-  .t.stop:hover {
-    border-color: #fc8181;
   }
   .labels {
     flex: 1;
