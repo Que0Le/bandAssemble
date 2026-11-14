@@ -58,7 +58,7 @@ export function currentProject(): Project {
   const c: Record<string, Chart> = {};
   for (const id of Object.keys(charts)) c[id] = { roleId: id, objects: charts[id] };
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     id: meta.id,
     title: meta.title,
     base: meta.base,

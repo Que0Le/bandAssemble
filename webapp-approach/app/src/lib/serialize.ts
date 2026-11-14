@@ -8,13 +8,15 @@ import type { SongObject } from './model';
 /** One object as its text block (no trailing newline). */
 export function objectText(o: SongObject): string {
   if (o.type === 'label') return `[${o.text}]`; // section header on its own line
+  if (o.type === 'chorddef') return `${o.name} [${o.grip}]`; // custom fingering
   if (o.type === 'tab') {
     const cap = o.caption ? `${o.caption}\n` : '';
     return cap + o.lines.join('\n');
   }
-  // line: lyric(+chords), then strum, then note — each on its own row
+  // line: the flow row (@kind prefix for non-lyric), then strum, then note
   const rows: string[] = [];
-  if (o.text) rows.push(o.text);
+  if (o.kind && o.kind !== 'lyric') rows.push(`@${o.kind}${o.text ? ' ' + o.text : ''}`);
+  else if (o.text) rows.push(o.text);
   if (o.strum) rows.push(o.strum);
   if (o.note) rows.push(`(${o.note})`);
   return rows.join('\n');

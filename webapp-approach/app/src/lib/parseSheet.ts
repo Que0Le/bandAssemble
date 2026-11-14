@@ -1,18 +1,23 @@
 // Parse a plain-text chord sheet back into objects — the inverse of
 // serialize.ts, so paste -> edit -> copy round-trips. Recognizes:
+//   Name [x02010]        -> chorddef   (custom chord fingering; not timed)
 //   [Section]            -> label      (whole-line bracket, not a chord)
+//   @kind text           -> line       (typed flow line: @solo, @instrumental, …)
 //   e| / B| / G| ...     -> tab block  (consecutive string rows)
 //   ↓ ↑ × > ~ (glyphs)   -> strum      (attached to the line above, else its own)
 //   (anything)           -> note       (attached to the line above, else its own)
-//   everything else      -> line       (lyrics with inline [chords])
+//   everything else      -> line       (a lyric flow line with inline [chords])
 // See ../../03-data-model.md.
 
 import type { SongObject, LineObject } from './model';
+import { gripToFrets } from './chords';
 
 const SECTION_RE = /^\[([^\]]+)\]$/;
 const TAB_RE = /^[eBGDAE]\s*\|/;
 const STRUM_RE = /^[\s↓↑×xX><~•._/\\]+$/u;
 const NOTE_RE = /^\((.*)\)$/;
+const CHORDDEF_RE = /^(\S+)\s+\[([^\]]+)\]$/; // "Am7 [x02010]" / "Am7 [x 0 12 0 1 0]"
+const KIND_RE = /^@([\w-]+)\s*(.*)$/u; // "@solo Lead break"
 const hasArrow = (s: string) => /[↓↑]/u.test(s);
 const looksChord = (t: string) =>
   /^[A-G][#b]?(m|maj|min|dim|aug|sus|add|M)?\d{0,2}(sus\d)?(\/[A-G][#b]?)?$/.test(t);
@@ -48,11 +53,44 @@ export function parseSheet(text: string): SongObject[] {
       continue;
     }
 
+    // custom chord fingering: "Am7 [x02010]" (a chord name + a valid grip)
+    const cdm = t.match(CHORDDEF_RE);
+    if (cdm && looksChord(cdm[1]) && gripToFrets(cdm[2])) {
+      objs.push({
+        type: 'chorddef',
+        id: nid(),
+        startSec: 0,
+        endSec: 0,
+        name: cdm[1].trim(),
+        grip: cdm[2].trim(),
+      });
+      last = null;
+      i++;
+      continue;
+    }
+
     // section label (a whole-line bracket whose content isn't a chord)
     const sm = t.match(SECTION_RE);
     if (sm && !looksChord(sm[1].trim())) {
       objs.push({ type: 'label', id: nid(), startSec: 0, endSec: 0, text: sm[1].trim() });
       last = null;
+      i++;
+      continue;
+    }
+
+    // typed flow line: "@solo …", "@instrumental …" (kind + optional text)
+    const km = t.match(KIND_RE);
+    if (km) {
+      const lo: LineObject = {
+        type: 'line',
+        id: nid(),
+        startSec: 0,
+        endSec: 0,
+        kind: km[1],
+        text: km[2].trim() || undefined,
+      };
+      objs.push(lo);
+      last = lo;
       i++;
       continue;
     }
@@ -102,7 +140,7 @@ export function reTime(next: SongObject[], prev: SongObject[]): SongObject[] {
       t = prev[i].endSec;
     } else {
       next[i].startSec = t;
-      if (next[i].type !== 'label') t += 3;
+      if (next[i].type !== 'label' && next[i].type !== 'chorddef') t += 3;
       next[i].endSec = t;
     }
   }
@@ -117,7 +155,7 @@ export function reTime(next: SongObject[], prev: SongObject[]): SongObject[] {
 export function autoTime(objs: SongObject[], perSec = 3): SongObject[] {
   let t = 0;
   for (const o of objs) {
-    if (o.type === 'label') {
+    if (o.type === 'label' || o.type === 'chorddef') {
       o.startSec = t;
       o.endSec = t;
     } else {

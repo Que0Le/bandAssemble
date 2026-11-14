@@ -8,9 +8,11 @@ export interface ObjBase {
   endSec: number; // for 'label' this is ignored (a label is a point)
 }
 
-// The workhorse — one displayed line-block. text/strum/note all optional.
+// The workhorse — one displayed flow line. kind says what it is (lyric by
+// default, else solo / instrumental / … — an open set); text/strum/note optional.
 export interface LineObject extends ObjBase {
   type: 'line';
+  kind?: string; // flow-line kind: undefined/'lyric' = a sung line; else 'solo', 'instrumental', …
   text?: string; // lyrics with EMBEDDED inline chords: "[Em]So close how [D]far"
   strum?: string; // rhythm row shown below (Unicode glyphs; spaces preserved)
   note?: string; // free annotation shown below
@@ -30,7 +32,15 @@ export interface TabObject extends ObjBase {
   caption?: string;
 }
 
-export type SongObject = LineObject | LabelObject | TabObject;
+// A custom chord fingering ("Am7 [x02010]"). NOT part of the timed flow — an
+// annotation that feeds the chord diagrams. grip is a 6-string fingering.
+export interface ChordDefObject extends ObjBase {
+  type: 'chorddef';
+  name: string; // "Am7"
+  grip: string; // "x02010" or spaced "x 0 12 0 1 0" — see lib/chords gripToFrets
+}
+
+export type SongObject = LineObject | LabelObject | TabObject | ChordDefObject;
 
 // ---- Roles & Charts ------------------------------------------------------
 
@@ -63,7 +73,7 @@ export interface Base {
 }
 
 export interface Project {
-  schemaVersion: 3;
+  schemaVersion: 4;
   id: string;
   title: string;
   base: Base;
@@ -73,10 +83,12 @@ export interface Project {
 
 // ---- helpers -------------------------------------------------------------
 
-/** Index of the object whose time range contains `head` (objects ordered by start). */
+/** Index of the flow object whose time range contains `head` (objects ordered by
+ *  start). Chord-def objects aren't part of the flow, so they're never returned. */
 export function objectIndexAt(objects: SongObject[], head: number): number {
   let idx = -1;
   for (let i = 0; i < objects.length; i++) {
+    if (objects[i].type === 'chorddef') continue; // not timed; skip for highlighting
     if (objects[i].startSec <= head) idx = i;
     else break;
   }
@@ -110,7 +122,8 @@ const line = (
   text?: string,
   strum?: string,
   note?: string,
-): LineObject => ({ type: 'line', id: id(), startSec, endSec, text, strum, note });
+  kind?: string,
+): LineObject => ({ type: 'line', id: id(), startSec, endSec, text, strum, note, ...(kind ? { kind } : {}) });
 const label = (startSec: number, text: string): LabelObject => ({
   type: 'label',
   id: id(),
@@ -118,9 +131,19 @@ const label = (startSec: number, text: string): LabelObject => ({
   endSec: startSec,
   text,
 });
+const cdef = (name: string, grip: string): ChordDefObject => ({
+  type: 'chorddef',
+  id: id(),
+  startSec: 0,
+  endSec: 0,
+  name,
+  grip,
+});
 
 // The Guitar chart — the rich part (chords + strum + a solo tab).
 const guitarObjects: SongObject[] = [
+  cdef('Am7', 'x02010'),
+  cdef('D/F#', '2x023x'),
   label(0, 'Verse 1'),
   line(0, 3, '[G]Đường tất nhiên còn dài', '↓   ↓ ↑   ↓   ↑'),
   line(3, 6, '[D]Ai tất nhiên cũng [G]ngại'),
@@ -130,7 +153,7 @@ const guitarObjects: SongObject[] = [
   line(15, 18, '[D]Trời giờ đã buông ngân [G]chiều'),
   line(18, 21, 'Nhưng [C]hoa những ngày mà [Am]không biết ngắm'),
   line(21, 24, '[D]Đời phí lắm biết [G]không'),
-  line(24, 26, '[C] [G]', undefined, 'turnaround'),
+  line(24, 26, '[C] [G]', undefined, 'turnaround', 'instrumental'),
   label(26, 'Pre-chorus'),
   line(26, 29, 'Vì [Am]ta đã lang bạt lâu quá lâu', '↓↓ ↑ ↑↓'),
   line(29, 32, '[Em]Nhưng nghĩ thơ chẳng ra mấy câu'),
@@ -173,7 +196,7 @@ function toBaseLyrics(objs: SongObject[]): SongObject[] {
 const baseLyrics = toBaseLyrics(guitarObjects);
 
 export const PROJECT: Project = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   id: 'sample-ballad',
   title: 'Đường còn dài (demo)',
   base: { lengthSec: 48, bpm: 76, lyrics: baseLyrics },

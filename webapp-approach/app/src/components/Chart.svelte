@@ -3,11 +3,13 @@
   import { objectIndexAt } from '../lib/model';
   import { view, currentObjects, roles, cloneInto, cloneSources } from '../view.svelte';
   import { chordSvg } from '../lib/chordDiagram';
+  import { chordDefs } from '../lib/chords';
   import ObjectView from './ObjectView.svelte';
   import ChartEdit from './ChartEdit.svelte';
   import ChartToolbar from './ChartToolbar.svelte';
   const s = session!;
   const objects = $derived(currentObjects());
+  const defs = $derived(chordDefs(objects)); // custom fingerings for this chart
   const roleLabel = $derived(roles.find((r) => r.id === view.roleId)?.label ?? view.roleId);
 
   // ---- Two-page horizontal viewer -------------------------------------------
@@ -107,7 +109,7 @@
   let tip = $state<{ x: number; y: number; html: string; name: string } | null>(null);
   function showTip(e: MouseEvent, chord: string) {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    tip = { x: r.left + r.width / 2, y: r.top, name: chord, html: chordSvg(chord) ?? '' };
+    tip = { x: r.left + r.width / 2, y: r.top, name: chord, html: chordSvg(chord, defs) ?? '' };
   }
   const hideTip = () => (tip = null);
 </script>

@@ -68,15 +68,26 @@ function metaOf(p: Project): ProjectMeta {
 }
 
 function isProject(p: unknown): p is Project {
-  const o = p as Project | null;
+  const o = p as { schemaVersion?: number; roles?: unknown; charts?: unknown; base?: unknown } | null;
+  // accept v3 and v4 — v3 objects are structurally valid v4 (kind/chorddef are additive)
   return (
-    !!o && o.schemaVersion === 3 && Array.isArray(o.roles) && !!o.charts && !!o.base
+    !!o &&
+    (o.schemaVersion === 3 || o.schemaVersion === 4) &&
+    Array.isArray(o.roles) &&
+    !!o.charts &&
+    !!o.base
   );
+}
+
+/** Upgrade an accepted project in place to the current schema (v3 -> v4). */
+function migrate(p: Project): Project {
+  p.schemaVersion = 4; // additive: v3 lines lack `kind` (= lyric), no chorddefs
+  return p;
 }
 
 export function loadProject(id: string): Project | null {
   const p = read<Project>(projectKey(id));
-  return isProject(p) ? p : null;
+  return isProject(p) ? migrate(p) : null;
 }
 
 /** Persist a project and upsert its index row (bumps updatedAt). */
@@ -102,7 +113,7 @@ function uniqueId(base: string): string {
 export function createProject(title: string): string {
   const id = uniqueId(slug(title));
   saveProject({
-    schemaVersion: 3,
+    schemaVersion: 4,
     id,
     title: title.trim() || id,
     base: { lengthSec: 0, lyrics: [] },
@@ -115,7 +126,7 @@ export function createProject(title: string): string {
 /** Import a project (validated by the caller); fresh id if it clashes — never clobbers. */
 export function importProject(p: Project): string {
   const id = uniqueId(slug(p.title || p.id || 'project'));
-  saveProject({ ...p, id });
+  saveProject(migrate({ ...p, id }));
   return id;
 }
 
@@ -137,7 +148,7 @@ export function renameProject(id: string, title: string): void {
 /** Parse + validate project text and import it as a new project. Throws on bad input. */
 export function importProjectFromText(text: string): string {
   const p = JSON.parse(text) as Project;
-  if (!isProject(p)) throw new Error('Not a bandAssemble project file (schemaVersion 3).');
+  if (!isProject(p)) throw new Error('Not a bandAssemble project file (schemaVersion 3–4).');
   return importProject(p);
 }
 

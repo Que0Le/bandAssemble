@@ -183,8 +183,10 @@
 
   function preview(o: SongObject): string {
     if (o.type === 'label') return '[' + o.text + ']';
+    if (o.type === 'chorddef') return o.name + ' [' + o.grip + ']';
     if (o.type === 'tab') return 'tab · ' + o.lines.length + ' rows';
-    return o.text || o.strum || (o.note ? '(' + o.note + ')' : '(empty)');
+    const kind = o.kind && o.kind !== 'lyric' ? '@' + o.kind + ' ' : '';
+    return kind + (o.text || o.strum || (o.note ? '(' + o.note + ')' : '(empty)'));
   }
 
   async function copySheet() {

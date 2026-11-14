@@ -5,6 +5,7 @@
   // owns any tooltip.
   import type { SongObject } from '../lib/model';
   import { parseInline } from '../lib/chords';
+  import { chordSvg } from '../lib/chordDiagram';
 
   let {
     obj,
@@ -22,7 +23,18 @@
 {:else if obj.type === 'tab'}
   {#if obj.caption}<div class="note">{obj.caption}</div>{/if}
   <pre class="tab">{obj.lines.join('\n')}</pre>
+{:else if obj.type === 'chorddef'}
+  {@const svg = chordSvg(obj.name, { [obj.name]: obj.grip })}
+  <div class="chorddef" title={`${obj.name}  ${obj.grip}`}>
+    {#if svg}
+      <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+      {@html svg}
+    {:else}
+      <span class="cd-text">{obj.name} [{obj.grip}]</span>
+    {/if}
+  </div>
 {:else}
+  {#if obj.kind && obj.kind !== 'lyric'}<div class="kind-chip">{obj.kind}</div>{/if}
   {#if obj.text}
     <div class="text">
       {#each parseInline(obj.text) as seg}{#if seg.chord}<span
@@ -81,6 +93,29 @@
     font-style: italic;
     color: #8b93a3;
     margin-top: 2px;
+  }
+  /* A typed (non-lyric) flow line, e.g. solo / instrumental. */
+  .kind-chip {
+    display: inline-block;
+    font-size: 0.66rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #c9a7ff;
+    border: 1px solid #4a3a6b;
+    border-radius: 6px;
+    padding: 1px 7px;
+    margin-bottom: 2px;
+  }
+  /* A custom chord fingering, shown as its diagram. */
+  .chorddef {
+    display: inline-block;
+    vertical-align: top;
+    margin: 2px 8px 2px 0;
+  }
+  .cd-text {
+    font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+    color: #ffcf6b;
+    font-size: 0.85rem;
   }
   .tab {
     font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;

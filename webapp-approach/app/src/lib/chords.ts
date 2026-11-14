@@ -2,6 +2,8 @@
 // The parser only recognizes the tokens for display/transpose; the text is
 // the source of truth. See ../../03-data-model.md.
 
+import type { SongObject } from './model';
+
 export interface Seg {
   chord?: string; // the chord token that starts this segment, e.g. "Em", "A7", "G/B"
   text: string; // the lyric chunk under/after it ("" for a chord with no following text)
@@ -62,4 +64,36 @@ export function stripLyrics(text: string): string {
   return parseInline(text)
     .map((s) => (s.chord ? `[${s.chord}]` : '') + s.text.replace(/\S/g, ' '))
     .join('');
+}
+
+// ---- custom chord fingerings (Ultimate-Guitar style: "Am7 [x02010]") --------
+
+/**
+ * Parse a fingering grip into 6 fret numbers, low-E → high-e (-1 = muted,
+ * 0 = open). Accepts the compact form "x02010" (single digits) or the spaced
+ * form "x 0 12 0 1 0" (needed for two-digit frets). Null if not 6 valid frets.
+ */
+export function gripToFrets(grip: string): number[] | null {
+  const t = grip.trim();
+  const toks = /\s/.test(t) ? t.split(/\s+/) : [...t];
+  if (toks.length !== 6) return null;
+  const out: number[] = [];
+  for (const tk of toks) {
+    if (/^[xX]$/.test(tk)) out.push(-1);
+    else if (/^\d{1,2}$/.test(tk)) out.push(parseInt(tk, 10));
+    else return null;
+  }
+  return out;
+}
+
+/** True if `grip` is a well-formed 6-string fingering. */
+export function isGrip(grip: string): boolean {
+  return gripToFrets(grip) !== null;
+}
+
+/** Chord name → grip, collected from a chart's chorddef objects. */
+export function chordDefs(objects: SongObject[]): Record<string, string> {
+  const m: Record<string, string> = {};
+  for (const o of objects) if (o.type === 'chorddef') m[o.name] = o.grip;
+  return m;
 }

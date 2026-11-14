@@ -1,6 +1,10 @@
 // Self-contained chord-diagram generator: chord name -> inline SVG fretboard.
 // No external images or network. Frets are [low-E, A, D, G, B, high-e];
-// -1 = muted, 0 = open, n = fret number. Unknown chords return null.
+// -1 = muted, 0 = open, n = fret number. A custom-fingering map (from the
+// chart's "Name [grip]" defs) is checked first, then the built-ins; unknown
+// chords return null.
+
+import { gripToFrets } from './chords';
 
 const SHAPES: Record<string, number[]> = {
   G: [3, 2, 0, 0, 0, 3],
@@ -31,9 +35,19 @@ function normalize(name: string): string {
 const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+/** Frets for a chord: a custom def (if given) wins, else a built-in shape. */
+function fretsFor(name: string, defs?: Record<string, string>): number[] | null {
+  const custom = defs?.[name];
+  if (custom) {
+    const g = gripToFrets(custom);
+    if (g) return g;
+  }
+  return SHAPES[name] ?? SHAPES[normalize(name)] ?? null;
+}
+
 /** Return an inline SVG string for the chord, or null if we have no shape. */
-export function chordSvg(name: string): string | null {
-  const frets = SHAPES[name] ?? SHAPES[normalize(name)];
+export function chordSvg(name: string, defs?: Record<string, string>): string | null {
+  const frets = fretsFor(name, defs);
   if (!frets) return null;
 
   // Geometry
@@ -108,7 +122,7 @@ export function chordSvg(name: string): string | null {
   )} chord diagram">${parts.join('')}</svg>`;
 }
 
-/** Whether a diagram exists for this chord token. */
-export function hasDiagram(name: string): boolean {
-  return !!(SHAPES[name] ?? SHAPES[normalize(name)]);
+/** Whether a diagram exists for this chord token (custom def or built-in). */
+export function hasDiagram(name: string, defs?: Record<string, string>): boolean {
+  return !!fretsFor(name, defs);
 }
