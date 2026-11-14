@@ -1,6 +1,6 @@
 # bandAssemble — Project Description & Roadmap
 
-_Last updated: 2026-11-12 · Status: prototyping — Svelte web app under [`webapp-approach/`](webapp-approach/)_
+_Last updated: 2026-11-14 · Status: prototyping — Svelte web app under [`webapp-approach/`](webapp-approach/)_
 
 ## 1. Vision
 
@@ -35,8 +35,8 @@ wording elsewhere in this doc._
 - **Role** — the musical part a device shows: vocal1, vocal2, bass, guitar-strum,
   guitar-solo, drum… Anyone can switch to any Role freely.
 - **Chart** — the notation for one Role: a flat array of timed objects (line / label /
-  tab). **One Chart per Role.** Every device holds a full copy of **every** Chart
-  (they're tiny text); only the Maestro holds the audio file.
+  tab / chorddef). **One Chart per Role.** Every device holds a full copy of **every**
+  Chart (they're tiny text); only the Maestro holds the audio file.
 - **Base** — the Maestro-authored skeleton: lyrics + timestamps (+ the audio reference).
   A Role's Chart starts by **cloning** the Base, then gets its own chords / strum / solo.
 - **Edit** — a toggle on any device; changes are a **local draft** (work-in-progress)
@@ -96,10 +96,13 @@ shape in words. A **Project** (the band's reusable arrangement / documentation) 
 - **Roles** — the musical parts (vocal1, bass, guitar-strum, guitar-solo, drum…).
 - **Charts** — **one per Role**, each a flat, ordered array of **timed objects**:
   - **line** — a lyric line with inline `[chords]`, an optional **strum** row, and an
-    optional note. Rendered on one monospace grid so strokes align to the words.
+    optional note. Rendered on one monospace grid so strokes align to the words. A
+    `kind` tags non-lyric flow (`solo`, `instrumental`, …).
   - **label** — a section / jump point (Intro, Chorus…); doubles as a marker.
   - **tab** — a GuitarPro/TuxGuitar-style block for solos.
-  - Every object carries `startSec` / `endSec` into the master audio.
+  - **chorddef** — a custom chord fingering (`Am7` → `x02010`) feeding the chord
+    diagrams; an annotation, not part of the timed flow.
+  - Flow objects carry `startSec` / `endSec` into the master audio (`chorddef` is untimed).
 
 Position is always "seconds into the (as-is) audio," so imported timestamps stay valid
 forever (the audio isn't edited in V1). **Charts are small text and are replicated to

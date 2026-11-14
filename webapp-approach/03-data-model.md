@@ -15,9 +15,11 @@ in the data — that hierarchy is only how people *talk* about a song. Each obje
 
 The workhorse object is a **line**: a lyric line with **chords embedded inline** (saves
 space — no separate chord row), an optional **strum** row shown beneath it, and an
-optional **note**. Everything but the timing is optional, so the *same* shape covers
-every case. Two specials round it out: a `label` (a section/jump marker) and a `tab`
-block (multi-line notation text can't express).
+optional **note**. A `kind` tag types the line — a sung lyric by default, or `solo` /
+`instrumental` / … for non-vocal flow. Everything but the timing is optional, so the
+*same* shape covers every case. Three specials round it out: a `label` (a section/jump
+marker), a `tab` block (multi-line notation text can't express), and a `chorddef` (a
+custom chord fingering that feeds the chord diagrams — **not** part of the timed flow).
 
 One such array is a **Chart** — the notation for a single **Role**. A **Project**
 bundles a shared **Base** (the audio reference + timed lyrics) with **one Chart per
@@ -32,17 +34,17 @@ the audio file (see [`../SPEC.md`](../SPEC.md) §Terminology).
 
 TypeScript as the source of truth:
 
+The realized types live in [`app/src/lib/model.ts`](app/src/lib/model.ts); this mirrors it.
+
 ```ts
 // ---- Top level ----
-// A Project = a shared Base (audio + timed lyrics) + one Chart per Role. Charts
+// A Project = a shared Base (audio ref + timed lyrics) + one Chart per Role. Charts
 // are tiny text and replicate to EVERY device; the audio file stays on the
 // Maestro. See ../SPEC.md §Terminology (Maestro / Player / Base / Chart).
 interface Project {
-  schemaVersion: 3;          // 3 = Base + per-Role Charts (was: single object array)
-  id: string;                // uuid
+  schemaVersion: 4;          // 4 = typed flow lines (line.kind) + chorddef objects
+  id: string;
   title: string;
-  createdAt: string;         // ISO
-  updatedAt: string;
   base: Base;                // the Maestro-authored skeleton everyone clones from
   roles: Role[];             // the musical parts
   charts: Record<string, Chart>;  // roleId -> that Role's Chart
@@ -50,10 +52,10 @@ interface Project {
 
 // The shared skeleton. A Role's Chart starts as a clone of `base.lyrics`.
 interface Base {
-  audio: AudioRef;           // reference only — the file lives on the Maestro
+  audio?: AudioRef;          // reference only — the file bytes live on the Maestro (IndexedDB)
   lengthSec: number;         // master audio length; all positions are seconds into it
+  bpm?: number;              // optional — drives the practice-mode metronome only
   lyrics: SongObject[];      // timed lyric lines (+ labels): the clonable skeleton
-  tempo?: TempoMap;          // optional, future — a bar grid for %/time-sig (see §Strum)
 }
 
 // One Role's notation: a flat, ordered array of timed objects.
@@ -63,33 +65,31 @@ interface Chart {
 }
 
 // ---- Audio ----
+// Just the reference. The bytes live in IndexedDB on the Maestro's device,
+// keyed by project id (see lib/media); Players don't need the file.
 interface AudioRef {
-  // The Maestro holds the actual file; Players do NOT need it.
   fileName: string;
   durationSec: number;
-  sampleRate?: number;
-  storage: 'embedded' | 'linked';   // how the file travels (see Open decisions)
-  hint?: string;                    // if linked: a locating hint, never a hard path
-  sha256?: string;                  // verify a re-linked file is the same recording
 }
 
 // ---- The object array ----------------------------------------------------
-// Positions are seconds into the master audio. Three object types; `line` does
-// almost everything, `label` and `tab` are the two specials.
+// Positions are seconds into the master audio. `line` does almost everything;
+// `label`, `tab` and `chorddef` are the specials.
 
 interface ObjBase {
-  id: string;                // uuid
+  id: string;
   startSec: number;
-  endSec: number;            // for `label`, endSec is ignored (a label is a point)
+  endSec: number;            // for `label`/`chorddef`, not a span (a point / untimed)
 }
 
-// The workhorse — one displayed line-block. All of text/strum/note are optional:
+// The workhorse — one displayed flow line. All of text/strum/note are optional:
 //   text only          → a sung lyric line
 //   text = chords only  → an instrumental bar, e.g. "[Em] [Em] [Am] [C]"
 //   strum only          → a rhythm-only line
 //   note only           → a spoken/structural cue
 interface LineObject extends ObjBase {
   type: 'line';
+  kind?: string;   // flow-line type: undefined/'lyric' = sung; else 'solo', 'instrumental', …
   text?: string;   // lyrics with EMBEDDED inline chords: "[Em]So close how [D]far"
   strum?: string;  // rhythm row shown BELOW the text (Unicode glyphs — see §Strum)
   note?: string;   // free annotation shown below: "let ring", "build", "x2"
@@ -107,10 +107,17 @@ interface TabObject extends ObjBase {
   type: 'tab';
   lines: string[]; // monospace tab rows, e.g. ["e|--0--2--|","B|--1--3--|", …]
   caption?: string;
-  // EXCLUDED from sharing if it encodes copyrighted material (like audio/lyrics).
 }
 
-type SongObject = LineObject | LabelObject | TabObject;
+// A custom chord fingering ("Am7 [x02010]"). NOT part of the timed flow — an
+// annotation that feeds the chord diagrams (see lib/chords gripToFrets).
+interface ChordDefObject extends ObjBase {
+  type: 'chorddef';
+  name: string;    // "Am7"
+  grip: string;    // "x02010", or spaced for 2-digit frets: "x 0 12 0 1 0"
+}
+
+type SongObject = LineObject | LabelObject | TabObject | ChordDefObject;
 
 // ---- Roles ---------------------------------------------------------------
 // Free-form parts; `kind` is only a hint for default notation. A band may have
@@ -121,13 +128,6 @@ interface Role {
   id: string;                // "vocal1", "guitar-strum", "bass"…
   kind: InstrumentKind;      // hint for default notation
   label: string;             // "Vocal 1", "Guitar (strum)"
-}
-
-// ---- Tempo (optional, future) --------------------------------------------
-interface TempoMap {
-  // A bar grid, only if a section needs %/time-sig/clean strum alignment.
-  // Absent = seconds only, no musical grid (the V1 default).
-  segments: Array<{ atSec: number; bpm: number; timeSig: [number, number] }>;
 }
 ```
 
@@ -211,7 +211,16 @@ topology (Players only talk to the Maestro).
 
 The playhead finds the object in the **current Role's Chart** where
 `startSec ≤ now < endSec` and highlights / scrolls to it. Keeping each Chart's `objects`
-sorted by `startSec` makes this a cheap lookup.
+sorted by `startSec` makes this a cheap lookup. `chorddef` objects are **not** in the
+flow, so highlighting skips them (`objectIndexAt` in `model.ts`).
+
+### Authoring times as "m:ss"
+
+Internally every position is `startSec` / `endSec` in **seconds**. For hand-annotation,
+the Editor's paste-JSON format also accepts human `startMin` / `endMin` strings (`"1:42"`,
+also `"1.42"`) — way easier to read off a normal player's elapsed-time display. On load,
+a present clock string **wins** over the raw seconds; on export the Editor emits both
+(`secToClock` / `clockToSec` in `lib/util.ts`). The stored model keeps only seconds.
 
 ## Sharing boundary (see `../SPEC.md` §Licensing)
 
