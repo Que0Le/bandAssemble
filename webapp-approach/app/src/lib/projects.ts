@@ -101,17 +101,12 @@ export function saveProject(p: Project): void {
   writeIndex(idx);
 }
 
-function uniqueId(base: string): string {
-  const idx = readIndex();
-  let id = base;
-  let k = 2;
-  while (idx.some((e) => e.id === id)) id = `${base}-${k++}`;
-  return id;
-}
-
 /** A blank project: empty Base, no roles. Returns its new id. */
 export function createProject(title: string): string {
-  const id = uniqueId(slug(title));
+  // Globally-unique id (not a title slug): two devices that both make a song
+  // called "The Scientist" must NOT collide, or joining one would overwrite the
+  // other's local project. The id is identity; the title is just a label.
+  const id = crypto.randomUUID();
   saveProject({
     schemaVersion: 4,
     id,
@@ -123,9 +118,9 @@ export function createProject(title: string): string {
   return id;
 }
 
-/** Import a project (validated by the caller); fresh id if it clashes — never clobbers. */
+/** Import a project (validated by the caller) under a fresh id — never clobbers. */
 export function importProject(p: Project): string {
-  const id = uniqueId(slug(p.title || p.id || 'project'));
+  const id = crypto.randomUUID();
   saveProject(migrate({ ...p, id }));
   return id;
 }
@@ -133,7 +128,7 @@ export function importProject(p: Project): string {
 export function duplicateProject(id: string): string | null {
   const p = loadProject(id);
   if (!p) return null;
-  const newId = uniqueId(slug(p.title) + '-copy');
+  const newId = crypto.randomUUID();
   saveProject({ ...p, id: newId, title: p.title + ' (copy)' });
   return newId;
 }

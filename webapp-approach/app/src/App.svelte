@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { session, SEAT } from './session.svelte';
+  import { view, saveJoinedCopy } from './view.svelte';
   import Home from './components/Home.svelte';
   import NewProject from './components/NewProject.svelte';
   import RoleChooser from './components/RoleChooser.svelte';
@@ -14,6 +15,13 @@
   import Editor from './components/Editor.svelte';
 
   onMount(() => session?.start());
+
+  // A joined session is live-only (nothing stored). Let a player keep it on demand.
+  let savedCopy = $state(false);
+  function onSaveCopy() {
+    saveJoinedCopy();
+    savedCopy = true;
+  }
 
   // Landing: no seat AND no project chosen → the project list (Home). With a
   // project but no seat → the seat picker. A seat → the app for that project.
@@ -53,6 +61,16 @@
   <section class="stage">
     <div class="topbar">
       <div class="role-badge {SEAT}">{SEAT === 'maestro' ? '🎛️ MAESTRO' : '📱 PLAYER'}</div>
+      {#if view.ephemeral}
+        <button
+          class="savecopy"
+          onclick={onSaveCopy}
+          title="This joined song isn't stored on your device. Save it as your own local project to keep practising it after the session ends."
+          >💾 Save a copy</button
+        >
+      {:else if savedCopy}
+        <span class="savedmsg">✓ Saved to your projects</span>
+      {/if}
       <SessionShare />
       <details class="meta">
         <summary>details</summary>
@@ -150,6 +168,25 @@
   }
   .wsdiag .att {
     color: #8b93a3;
+  }
+  /* "Save a copy" — offered only while on a joined (ephemeral) session. */
+  .savecopy {
+    padding: 5px 10px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #0b1220;
+    background: #7ee0a0;
+    border: none;
+    border-radius: 7px;
+    cursor: pointer;
+  }
+  .savecopy:hover {
+    background: #99e9b4;
+  }
+  .savedmsg {
+    font-size: 0.8rem;
+    color: #7ee0a0;
+    font-weight: 600;
   }
   /* Build stamp — muted, pushed to the right so the connection pill sits beside it. */
   .build {

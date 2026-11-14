@@ -63,11 +63,21 @@ function initialChartMode(): ChartMode {
   return typeof window !== 'undefined' && window.innerWidth < 700 ? 'scroll' : 'pages';
 }
 
-export const view = $state<{ roleId: string; editing: boolean; autoScroll: boolean; chartMode: ChartMode }>({
+export const view = $state<{
+  roleId: string;
+  editing: boolean;
+  autoScroll: boolean;
+  chartMode: ChartMode;
+  ephemeral: boolean;
+}>({
   roleId: active.roles[0]?.id ?? '',
   editing: false,
   autoScroll: true, // auto-turn pages while playing; off = flip by hand (seeks still scroll)
   chartMode: initialChartMode(),
+  // A joined (discovered) session is live-only: we hold the host's project in
+  // memory and persist NOTHING, so a device never accumulates copies of songs it
+  // merely visited. "Save a copy" (saveJoinedCopy) turns it into a real project.
+  ephemeral: false,
 });
 
 /** Switch the chart layout and remember it on this device. */
@@ -97,6 +107,7 @@ export function currentProject(): Project {
 }
 
 function save(): void {
+  if (view.ephemeral) return; // joined session — live-only, never touches storage
   saveProject(currentProject());
 }
 
@@ -174,10 +185,11 @@ export function adoptProject(
   incomingRoles: Role[],
   incomingCharts: Record<string, SongObject[]>,
 ): void {
-  if (id) {
-    meta.id = id; // retarget saves to the joined song's own id
-    setLastOpened(id);
-  }
+  // A join is EPHEMERAL: mirror the host's live project in memory but persist
+  // nothing — the device's own stored projects stay untouched, and it never
+  // piles up copies of songs it only visited. (saveJoinedCopy keeps one on demand.)
+  view.ephemeral = true;
+  if (id) meta.id = id;
   meta.title = title;
   meta.base = base;
   // Replace roles wholesale (drop any the Maestro didn't send).
@@ -188,7 +200,19 @@ export function adoptProject(
   for (const k of Object.keys(incomingCharts)) charts[k] = incomingCharts[k];
   // Keep the current role if it still exists, else land on the first real one.
   if (!roles.some((r) => r.id === view.roleId)) view.roleId = roles[0]?.id ?? '';
-  save();
+  // Deliberately no save()/setLastOpened — the live arrangement stays in memory.
+}
+
+/** Persist the currently-joined (ephemeral) session as a real local project under
+ *  a fresh id, so the user can keep practising it offline. Leaves ephemeral mode,
+ *  so further host updates then save to this copy too. Returns the new id. */
+export function saveJoinedCopy(): string {
+  const id = crypto.randomUUID();
+  meta.id = id;
+  view.ephemeral = false;
+  saveProject(currentProject());
+  setLastOpened(id);
+  return id;
 }
 
 /** Apply a chart (local edit or distributed). Auto-registers an unknown Role so
