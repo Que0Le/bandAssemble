@@ -94,12 +94,16 @@
     color: #8b93a3;
     margin-top: 2px;
   }
-  /* Phones: trim the monospace grid so most lines fit the width without a sideways
-     swipe (kept on one size so chords/lyrics/strum stay aligned). */
+  /* Phones: trim the monospace grid, and let long lines WRAP rather than run off
+     the side. Chords are inline with their words, so a wrap keeps them together;
+     per-character strum alignment is necessarily approximate once a line wraps,
+     which is the right trade on a narrow screen (readable beats pixel-aligned). */
   @media (max-width: 640px) {
     .text,
     .strum {
       font-size: 0.85rem;
+      white-space: pre-wrap; /* keep the author's spaces, but allow wrapping */
+      overflow-wrap: anywhere; /* break even a single over-long token */
     }
   }
   /* A typed (non-lyric) flow line, e.g. solo / instrumental. */

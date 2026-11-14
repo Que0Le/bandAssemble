@@ -318,6 +318,17 @@
   .scroll.locked {
     overflow-y: hidden;
   }
+  /* Phones: stretch lines to the full column width so they wrap (ObjectView sets
+     pre-wrap at this breakpoint) instead of extending the strip sideways. */
+  @media (max-width: 640px) {
+    .scroll {
+      align-items: stretch;
+      overflow-x: hidden;
+    }
+    .scroll .obj {
+      max-width: 100%;
+    }
+  }
   /* CSS multi-column: content fills one column top-to-bottom, then the next to the
      right, extending the strip horizontally into pages. */
   .pages {
