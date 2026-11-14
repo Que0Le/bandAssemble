@@ -32,9 +32,6 @@ export class MasterAudio {
     this.el = el;
     if (el) el.playbackRate = this.rate;
   }
-  get hasMedia(): boolean {
-    return !!this.el;
-  }
 
   playheadSec(): number {
     if (this.el) return this.el.currentTime;

@@ -5,12 +5,7 @@ export const r2 = (n: number): number => Math.round(n * 100) / 100;
 
 /** Seconds → "m:ss" (empty string for 0 / falsy, so callers can inline it). */
 export function mmss(sec: number): string {
-  if (!sec) return '';
-  const m = Math.floor(sec / 60);
-  const ss = Math.round(sec % 60)
-    .toString()
-    .padStart(2, '0');
-  return `${m}:${ss}`;
+  return sec ? secToClock(sec) : '';
 }
 
 /** Seconds → "m:ss" clock the way a media player shows elapsed time (0 → "0:00").

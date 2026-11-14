@@ -6,8 +6,8 @@
   // project the element is still here (hidden) to be the sound/clock; video shows.
   import { onDestroy, onMount } from 'svelte';
   import { session } from '../session.svelte';
-  import { activeId, meta, setBaseAudio } from '../view.svelte';
-  import { getMediaUrl, putMedia, requestPersist } from '../lib/media';
+  import { activeId, meta, storeProjectMedia } from '../view.svelte';
+  import { getMediaUrl } from '../lib/media';
   const s = session!;
 
   let mediaEl = $state<HTMLMediaElement | undefined>(undefined);
@@ -42,9 +42,7 @@
     name = f.name;
     isVideo = f.type.startsWith('video/');
     missing = false;
-    const m = await putMedia(activeId, f);
-    setBaseAudio(f.name, m.durationSec);
-    void requestPersist();
+    await storeProjectMedia(f);
   }
 
   onDestroy(() => {

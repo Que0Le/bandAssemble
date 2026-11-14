@@ -16,6 +16,8 @@ import {
   getLastOpened,
   setLastOpened,
 } from './lib/projects';
+import { putMedia, requestPersist } from './lib/media';
+import type { MediaMeta } from './lib/media';
 import { slug, r2, download } from './lib/util';
 
 const params = new URLSearchParams(location.search);
@@ -119,6 +121,16 @@ export function setBaseAudio(fileName: string, durationSec: number): void {
   meta.base.audio = { fileName, durationSec };
   if (durationSec) meta.base.lengthSec = r2(durationSec);
   save();
+}
+
+/** Attach a file as the active project's media: store the bytes in IndexedDB,
+ *  note the reference + song length on the Base, and ask to keep it from eviction.
+ *  Shared by the Editor and the Maestro's media panel. */
+export async function storeProjectMedia(file: File): Promise<MediaMeta> {
+  const m = await putMedia(activeId, file);
+  setBaseAudio(file.name, m.durationSec);
+  void requestPersist();
+  return m;
 }
 
 /** Apply a chart (local edit or distributed). Auto-registers an unknown Role so

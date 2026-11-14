@@ -11,10 +11,10 @@
     openProjectFile,
     setChart,
     setBase,
-    setBaseAudio,
+    storeProjectMedia,
     activeId,
   } from '../view.svelte';
-  import { getMediaUrl, putMedia, requestPersist } from '../lib/media';
+  import { getMediaUrl } from '../lib/media';
   import { parseSheet, autoTime, reTime } from '../lib/parseSheet';
   import { objectsText } from '../lib/serialize';
   import { copyText } from '../lib/clipboard';
@@ -182,9 +182,7 @@
     mediaIsVideo = f.type.startsWith('video/');
     mediaMissing = false;
     curTime = 0;
-    const m = await putMedia(activeId, f);
-    setBaseAudio(f.name, m.durationSec);
-    void requestPersist(); // keep this (possibly large) blob from being evicted
+    await storeProjectMedia(f); // store in IndexedDB + note length + keep from eviction
     note('media stored · ' + f.name);
   }
   function togglePlay() {

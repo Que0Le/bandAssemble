@@ -54,7 +54,6 @@ export class Session {
   rtt = $state(Infinity);
   lastSync = $state(0);
   detached = $state(false); // Player force-stopped locally & ignoring the band
-  songLoaded = $state(false); // Maestro: the project's recording is decoded & ready
 
   private transport: WsTransport;
   private clock: ClockSync;
@@ -272,7 +271,6 @@ export class Session {
   attachMedia(el?: HTMLMediaElement) {
     if (!this.audio) return;
     this.audio.attach(el);
-    this.songLoaded = !!el;
     if (el) this.toggleMetronome(false); // the real track replaces the click
   }
 
