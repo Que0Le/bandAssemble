@@ -132,6 +132,10 @@ export class Session {
       });
     } else {
       this.transport.on('state/transport', (p: TransportMsg) => {
+        // A Maestro is clearly present now. If we joined an empty room first, our
+        // initial clock burst went unanswered (offset still 0) and this timestamp
+        // would convert against the Maestro's unrelated clock origin — so re-sync.
+        this.clock.resyncIfUnsynced();
         this.follow = {
           state: p.state,
           atSec: p.atSec,

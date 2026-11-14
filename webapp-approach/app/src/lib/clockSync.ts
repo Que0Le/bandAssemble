@@ -11,6 +11,7 @@ export class ClockSync {
 
   private burstTimer?: ReturnType<typeof setInterval>;
   private resyncTimer?: ReturnType<typeof setInterval>;
+  private syncing = false;
   private onVisible = () => {
     if (!document.hidden) this.burst();
   };
@@ -35,12 +36,24 @@ export class ClockSync {
 
   private burst(): void {
     this.bestRtt = Infinity; // re-evaluate each burst
+    this.syncing = true;
     let n = 0;
     clearInterval(this.burstTimer);
     this.burstTimer = setInterval(() => {
       this.send('clock/ping', { t1: this.now() });
-      if (++n >= 8) clearInterval(this.burstTimer);
+      if (++n >= 8) {
+        clearInterval(this.burstTimer);
+        this.syncing = false;
+      }
     }, 60);
+  }
+
+  /** Re-sync if we've never heard a pong yet — e.g. we connected before any
+   *  Maestro was in the room, so the initial burst went unanswered. No-op once
+   *  synced or while a burst is already in flight. */
+  resyncIfUnsynced(): void {
+    if (this.lastSync > 0 || this.syncing) return;
+    this.burst();
   }
 
   start(): void {
