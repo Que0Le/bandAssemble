@@ -18,10 +18,7 @@
     return a;
   });
 
-  function toggle() {
-    if (s.uiState === 'playing') isMaestro ? s.maestroPause() : s.askPause();
-    else isMaestro ? s.maestroPlay() : s.askPlay();
-  }
+  const toggle = () => s.togglePlay();
   const restart = () => (isMaestro ? s.restart() : s.askSeek(0));
   const goto = (atSec: number) => (isMaestro ? s.seek(atSec) : s.askSeek(atSec));
 </script>

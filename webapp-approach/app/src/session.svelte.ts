@@ -293,6 +293,13 @@ export class Session {
   jump(label: string) {
     this.transport.send('intent/jumpMarker', { label });
   }
+
+  /** Play/pause toggle, seat-aware: the Maestro acts, a Player sends an intent. */
+  togglePlay() {
+    const playing = this.uiState === 'playing';
+    if (this.seat === 'maestro') playing ? this.maestroPause() : this.maestroPlay();
+    else playing ? this.askPause() : this.askPlay();
+  }
 }
 
 export const session =

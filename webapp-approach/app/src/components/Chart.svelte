@@ -101,7 +101,13 @@
   }
   function onKey(e: KeyboardEvent) {
     if (view.editing) return;
-    if (e.key === 'ArrowRight') flip(1);
+    // Don't hijack keys while typing in a field (role picker, quick-edit, etc.).
+    const t = e.target as HTMLElement | null;
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    if (e.key === ' ' || e.code === 'Space') {
+      e.preventDefault(); // Space would otherwise scroll the page / click a focused button
+      s.togglePlay();
+    } else if (e.key === 'ArrowRight') flip(1);
     else if (e.key === 'ArrowLeft') flip(-1);
   }
 
@@ -240,9 +246,6 @@
     border: 1px solid #2a2f3a;
     border-radius: 10px;
     background: #0f1218;
-    /* fade the vertical page edges a touch */
-    -webkit-mask-image: linear-gradient(90deg, transparent, #000 2%, #000 98%, transparent);
-    mask-image: linear-gradient(90deg, transparent, #000 2%, #000 98%, transparent);
   }
   .chart.locked {
     overflow-x: hidden; /* auto-scroll on: the music drives the page, no hand-scroll */
