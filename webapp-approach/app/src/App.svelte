@@ -28,10 +28,17 @@
   const urlParams = new URLSearchParams(location.search);
   const hasProject = urlParams.has('project');
   const isNew = urlParams.has('new');
+  // The logo links back to the project list (Home): the app root with no query,
+  // which lands on the local projects + live-sessions list.
+  const homeHref = location.pathname;
 </script>
 
 <header>
-  <h1>bandAssemble <span class="tag">svelte port</span></h1>
+  <h1>
+    <a class="logo" href={homeHref} title="Projects — the project list and live sessions on the network"
+      >bandAssemble</a
+    > <span class="tag">svelte port</span>
+  </h1>
   <span class="build" title="Build timestamp. If two devices show different values, one is on a stale bundle — hard-reload it.">build {__APP_BUILD__}</span>
   {#if session}
     <div class="pill" class:ok={session.conn === 'connected'} class:bad={session.conn !== 'connected'}>
@@ -95,11 +102,13 @@
 
 <style>
   /* Full-screen performance stage: the chart fills everything between the header
-     and the sticky transport bar. Overrides the centered, max-width section. */
+     and the sticky transport bar. It fills the flex column (no hardcoded header
+     height — that was fragile when the header wrapped), and the chart scrolls
+     inside itself, so the stage never scrolls the page. */
   .stage {
     max-width: none;
     margin: 0;
-    height: calc(100dvh - 58px); /* header */
+    overflow: hidden; /* the chart area owns its own scrolling */
     padding: 10px 16px 78px; /* bottom clears the fixed TransportBar */
     display: flex;
     flex-direction: column;
@@ -168,6 +177,14 @@
   }
   .wsdiag .att {
     color: #8b93a3;
+  }
+  /* Logo links to the project list; looks like the title, not a link. */
+  .logo {
+    color: inherit;
+    text-decoration: none;
+  }
+  .logo:hover {
+    color: var(--accent);
   }
   /* "Save a copy" — offered only while on a joined (ephemeral) session. */
   .savecopy {
