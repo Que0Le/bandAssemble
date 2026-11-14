@@ -4,6 +4,7 @@
   // real band on different devices lands in one relay room (see lib/join).
   import { meta } from '../view.svelte';
   import CopyLinkBox from './CopyLinkBox.svelte';
+  import LoopbackWarning from './LoopbackWarning.svelte';
   import {
     rememberedCode,
     rememberCode,
@@ -11,7 +12,6 @@
     normalizeCode,
     joinUrl,
     qrSvg,
-    isLoopbackHost,
   } from '../lib/join';
 
   const proj = new URLSearchParams(location.search).get('project');
@@ -30,7 +30,6 @@
 
   const link = $derived(joinUrl(code));
   const qr = $derived(qrSvg(link));
-  const loopback = isLoopbackHost();
 </script>
 
 <section id="chooser">
@@ -59,13 +58,7 @@
 
   <div class="join">
     <p class="jh">For players — scan to join as a Player:</p>
-    {#if loopback}
-      <p class="warn">
-        ⚠ You opened this on <b>{location.hostname}</b>, which only works on this machine. For other
-        devices to join, reopen the app via your laptop's network address (e.g.
-        <code>http://192.168.x.x:{location.port || 8080}</code>) — then this QR and link will reach them.
-      </p>
-    {/if}
+    <LoopbackWarning />
     <div class="qrow">
       <div class="qr">{@html qr}</div>
       <CopyLinkBox {link} label="Copy" />
@@ -155,16 +148,5 @@
     width: 100%;
     height: 100%;
     display: block;
-  }
-  .warn {
-    color: #ffcf6b;
-    font-size: 0.8rem;
-    background: #241c0f;
-    border: 1px solid #4a3a1f;
-    border-radius: 8px;
-    padding: 8px 10px;
-  }
-  .warn code {
-    font-size: 0.76rem;
   }
 </style>

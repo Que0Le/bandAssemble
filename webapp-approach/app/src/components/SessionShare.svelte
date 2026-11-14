@@ -3,14 +3,14 @@
   // other devices can jump into THIS room. The link carries the live session id
   // (session.sessionId — the room this device is actually in), not a fresh code,
   // so what you share always matches where you are. Reuses lib/join.
-  import { joinUrl, qrSvg, isLoopbackHost } from '../lib/join';
+  import { joinUrl, qrSvg } from '../lib/join';
   import { session } from '../session.svelte';
   import CopyLinkBox from './CopyLinkBox.svelte';
+  import LoopbackWarning from './LoopbackWarning.svelte';
 
   const sid = session!.sessionId;
   const link = joinUrl(sid); // ?session=<sid>&seat=player
   const qr = qrSvg(link);
-  const loopback = isLoopbackHost();
 
   let open = $state(false);
 </script>
@@ -28,13 +28,7 @@
   {#if open}
     <div class="pop">
       <p class="ph">Scan or share to join as a Player</p>
-      {#if loopback}
-        <p class="warn">
-          ⚠ Opened on <b>{location.hostname}</b> — that only works on this machine. Reopen the app
-          via your laptop's network address (e.g.
-          <code>http://192.168.x.x:{location.port || 8080}</code>) so other devices can reach this QR.
-        </p>
-      {/if}
+      <LoopbackWarning />
       <div class="qrow">
         <div class="qr">{@html qr}</div>
         <CopyLinkBox {link} />
@@ -107,17 +101,5 @@
     font-family: ui-monospace, monospace;
     letter-spacing: 0.08em;
     color: var(--fg, #e6edf3);
-  }
-  .warn {
-    color: #ffcf6b;
-    font-size: 0.78rem;
-    background: #241c0f;
-    border: 1px solid #4a3a1f;
-    border-radius: 8px;
-    padding: 8px 10px;
-    margin: 0 0 10px;
-  }
-  .warn code {
-    font-size: 0.74rem;
   }
 </style>
