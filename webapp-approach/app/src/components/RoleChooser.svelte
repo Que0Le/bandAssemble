@@ -3,6 +3,7 @@
   // Each seat link keeps the project AND the shared session code in the URL, so a
   // real band on different devices lands in one relay room (see lib/join).
   import { meta } from '../view.svelte';
+  import CopyLinkBox from './CopyLinkBox.svelte';
   import {
     rememberedCode,
     rememberCode,
@@ -30,27 +31,6 @@
   const link = $derived(joinUrl(code));
   const qr = $derived(qrSvg(link));
   const loopback = isLoopbackHost();
-
-  let urlEl = $state<HTMLInputElement>();
-  let copied = $state(false);
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(link); // https / localhost only
-    } catch {
-      // Plain http on a LAN IP isn't a "secure context", so the async clipboard
-      // API is missing — fall back to selecting the field + execCommand('copy').
-      try {
-        urlEl?.focus();
-        urlEl?.select();
-        urlEl?.setSelectionRange(0, link.length);
-        document.execCommand('copy');
-      } catch {
-        /* nothing more to try — the field stays selected for a manual Ctrl+C */
-      }
-    }
-    copied = true;
-    setTimeout(() => (copied = false), 3000);
-  }
 </script>
 
 <section id="chooser">
@@ -88,10 +68,7 @@
     {/if}
     <div class="qrow">
       <div class="qr">{@html qr}</div>
-      <div class="jurl">
-        <input class="urlbox" bind:this={urlEl} value={link} readonly onfocus={(e) => (e.target as HTMLInputElement).select()} />
-        <button class="mini" onclick={copy}>{copied ? 'Copied' : 'Copy'}</button>
-      </div>
+      <CopyLinkBox {link} label="Copy" />
     </div>
   </div>
 
@@ -178,23 +155,6 @@
     width: 100%;
     height: 100%;
     display: block;
-  }
-  .jurl {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    min-width: 220px;
-    flex: 1;
-  }
-  .urlbox {
-    width: 100%;
-    font-family: ui-monospace, monospace;
-    font-size: 0.78rem;
-    background: #0f1218;
-    color: #cfe8ff;
-    border: 1px solid #2a3340;
-    border-radius: 8px;
-    padding: 8px 10px;
   }
   .warn {
     color: #ffcf6b;

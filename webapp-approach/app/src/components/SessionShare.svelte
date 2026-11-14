@@ -5,6 +5,7 @@
   // so what you share always matches where you are. Reuses lib/join.
   import { joinUrl, qrSvg, isLoopbackHost } from '../lib/join';
   import { session } from '../session.svelte';
+  import CopyLinkBox from './CopyLinkBox.svelte';
 
   const sid = session!.sessionId;
   const link = joinUrl(sid); // ?session=<sid>&seat=player
@@ -12,34 +13,6 @@
   const loopback = isLoopbackHost();
 
   let open = $state(false);
-  let urlEl = $state<HTMLDivElement>();
-  let copied = $state(false);
-
-  function selectUrl() {
-    if (!urlEl) return;
-    const sel = window.getSelection();
-    const range = document.createRange();
-    range.selectNodeContents(urlEl);
-    sel?.removeAllRanges();
-    sel?.addRange(range);
-  }
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(link); // https / localhost only
-    } catch {
-      // Plain http on a LAN IP isn't a "secure context", so the async clipboard
-      // API is missing — fall back to selecting the link + execCommand('copy').
-      try {
-        selectUrl();
-        document.execCommand('copy');
-      } catch {
-        /* link stays selected for a manual Ctrl+C */
-      }
-    }
-    copied = true;
-    setTimeout(() => (copied = false), 3000);
-  }
 </script>
 
 <div class="share">
@@ -64,12 +37,7 @@
       {/if}
       <div class="qrow">
         <div class="qr">{@html qr}</div>
-        <div class="jurl">
-          <!-- A wrapping box (not an <input>, which can't wrap) so the whole LAN
-               link is visible at once; user-select:all means a tap selects it all. -->
-          <div class="urlbox" bind:this={urlEl}>{link}</div>
-          <button class="mini" onclick={copy}>{copied ? 'Copied' : 'Copy link'}</button>
-        </div>
+        <CopyLinkBox {link} />
       </div>
       <p class="code-line">Session code: <b>{sid}</b></p>
     </div>
@@ -129,40 +97,6 @@
     width: 100%;
     height: 100%;
     display: block;
-  }
-  .jurl {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    min-width: 170px;
-    flex: 1;
-  }
-  .urlbox {
-    width: 100%;
-    font-family: ui-monospace, monospace;
-    font-size: 0.74rem;
-    line-height: 1.5;
-    background: #0b0e13;
-    color: #cfe8ff;
-    border: 1px solid #2a3340;
-    border-radius: 8px;
-    padding: 8px 10px;
-    /* wrap the long LAN link onto multiple lines instead of clipping it */
-    word-break: break-all;
-    overflow-wrap: anywhere;
-    user-select: all; /* one tap selects the whole link for manual copy */
-  }
-  .mini {
-    cursor: pointer;
-    color: #cfe8ff;
-    background: #182230;
-    border: 1px solid #2a3b4e;
-    border-radius: 8px;
-    padding: 6px 10px;
-    font-size: 0.8rem;
-  }
-  .mini:hover {
-    border-color: #4fd1c5;
   }
   .code-line {
     margin: 10px 0 0;
