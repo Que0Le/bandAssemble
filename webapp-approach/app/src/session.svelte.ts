@@ -123,7 +123,7 @@ export class Session {
       this.transport.on('session/hello', () => {
         this.broadcast();
         // Give a joiner the whole project: the song skeleton first, then charts.
-        this.transport.send('project/meta', { title: meta.title, base: meta.base });
+        this.transport.send('project/meta', { id: activeId, title: meta.title, base: meta.base });
         this.distributeCharts(); // bring a late joiner up to date
       });
       this.transport.on('chart/handoff', (p: ChartMsg) => {
@@ -153,7 +153,7 @@ export class Session {
         this.rtt = this.clock.bestRtt;
         this.lastSync = this.clock.lastSync;
       });
-      this.transport.on('project/meta', (p: ProjectMetaMsg) => adoptProjectMeta(p.title, p.base));
+      this.transport.on('project/meta', (p: ProjectMetaMsg) => adoptProjectMeta(p.id, p.title, p.base));
       this.transport.on('chart/update', (p: ChartMsg) => setChart(p.roleId, p.objects));
     }
   }

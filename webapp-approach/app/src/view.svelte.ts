@@ -160,10 +160,20 @@ export async function storeProjectMedia(file: File): Promise<MediaMeta> {
   return m;
 }
 
-/** Adopt a joined session's shared project skeleton (title + Base) so a device
- *  that joined a discovered session shows the real song, not its own template.
- *  The Roles + charts still arrive separately via setChart. */
-export function adoptProjectMeta(title: string, base: Base): void {
+/** Adopt a joined session's shared project (id + title + Base) so a device that
+ *  joined a discovered session shows the real song, not its own template — and,
+ *  crucially, saves it as a SEPARATE local project keyed by the Maestro's id, so
+ *  distribution never overwrites whatever this device had open (e.g. the sample).
+ *  The Roles + charts arrive right after via setChart (distributeCharts on hello). */
+export function adoptProjectMeta(id: string, title: string, base: Base): void {
+  if (id && id !== meta.id) {
+    // First time we switch onto this joined song: retarget saves to its own id
+    // and clear the old template's roles/charts so only the real ones remain.
+    meta.id = id;
+    roles.length = 0;
+    for (const k of Object.keys(charts)) delete charts[k];
+    setLastOpened(id);
+  }
   meta.title = title;
   meta.base = base;
   save();
@@ -176,6 +186,9 @@ export function setChart(roleId: string, objects: SongObject[]): void {
     roles.push({ id: roleId, kind: 'other', label: roleId });
   }
   charts[roleId] = objects;
+  // If the current selection is gone (e.g. right after adopting a joined song
+  // cleared the old roles), land on the first role we receive so the chart shows.
+  if (!roles.some((r) => r.id === view.roleId)) view.roleId = roleId;
   save();
 }
 

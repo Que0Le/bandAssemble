@@ -36,9 +36,12 @@ export interface ChartMsg {
   objects: SongObject[];
 }
 
-/** Maestro → joiner on hello: the shared project skeleton (title + timed Base), so
- *  a device that joined a discovered session adopts the real song, not its own. */
+/** Maestro → joiner on hello: the shared project skeleton (id + title + timed Base),
+ *  so a device that joined a discovered session adopts the real song as its OWN
+ *  local project (keyed by `id`) instead of overwriting whatever template it had
+ *  open (e.g. the seeded sample). */
 export interface ProjectMetaMsg {
+  id: string;
   title: string;
   base: Base;
 }
