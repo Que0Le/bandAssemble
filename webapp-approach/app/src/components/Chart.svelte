@@ -27,6 +27,7 @@
   let pagesW = $state(0); // inner width of the column area (no horizontal padding)
   let chartEl = $state<HTMLElement | undefined>(undefined);
   let pagesEl = $state<HTMLElement | undefined>(undefined);
+  let scrollEl = $state<HTMLElement | undefined>(undefined); // vertical (teleprompter) mode
   let els = $state<HTMLElement[]>([]);
 
   // Two pages must fit exactly: 2*colW + gap = pagesW. If colW is even a hair too
@@ -46,10 +47,15 @@
   // in (ac) and how far down that column it has read (vf, 0 = top … 1 = bottom),
   // because page breaks depend on measured heights, not object counts.
   let lastPh = -1;
+  let lastPhV = -1;
   $effect(() => {
     const ph = s.playhead; // dep: re-run as the playhead advances
     void step; // dep: recompute on resize
     void pagesW;
+    if (view.chartMode === 'scroll') {
+      tickScroll(ph);
+      return;
+    }
     const el = els[idx];
     if (!chartEl || !pagesEl || idx < 0 || !el || step <= 0) return;
     const pr = pagesEl.getBoundingClientRect();
@@ -82,6 +88,26 @@
     }
     lastPh = ph;
   });
+
+  // Vertical "teleprompter" mode: keep the active line ~1/3 down the column and
+  // glide the column downward as the song plays (same dwell/ease feel as the
+  // pager, but on the Y axis). A seek jumps to the active line; with auto-scroll
+  // off it holds so you can hand-scroll.
+  function tickScroll(ph: number) {
+    const el = els[idx];
+    if (!scrollEl || idx < 0 || !el) return;
+    const cr = scrollEl.getBoundingClientRect();
+    const er = el.getBoundingClientRect();
+    const target = scrollEl.scrollTop + (er.top - cr.top) - cr.height * TURN_AT;
+    const seek = Math.abs(ph - lastPhV) > 0.08;
+    if (seek) {
+      scrollEl.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+    } else if (s.uiState === 'playing' && view.autoScroll) {
+      const d = target - scrollEl.scrollTop;
+      if (Math.abs(d) > 0.5) scrollEl.scrollTop += d * EASE;
+    }
+    lastPhV = ph;
+  }
 
   // Double-click a line/label to jump the whole band there. (Single-click and
   // click-drag stay free for selecting text.)
@@ -138,6 +164,27 @@
         {/each}
       </div>
       <p class="sub">Then press ✎ Edit to add this part's chords / strum, and Hand off to share.</p>
+    </div>
+  {:else if view.chartMode === 'scroll'}
+    <!-- Teleprompter: one full-width column that glides down with the song. -->
+    <div
+      class="scroll"
+      class:locked={s.uiState === 'playing' && view.autoScroll}
+      bind:this={scrollEl}
+    >
+      {#each objects as obj, i (obj.id)}
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <div
+          class="obj"
+          class:active={i === idx}
+          role="button"
+          tabindex="-1"
+          bind:this={els[i]}
+          ondblclick={(e) => jumpTo(e, obj)}
+        >
+          <ObjectView {obj} onChordEnter={showTip} onChordLeave={hideTip} />
+        </div>
+      {/each}
     </div>
   {:else}
     <div class="stage">
@@ -249,6 +296,27 @@
   }
   .chart.locked {
     overflow-x: hidden; /* auto-scroll on: the music drives the page, no hand-scroll */
+  }
+  /* Vertical teleprompter: a single full-width column that scrolls down. */
+  .scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: auto; /* a rare long monospace line can still be swiped sideways */
+    overscroll-behavior: contain;
+    border: 1px solid #2a2f3a;
+    border-radius: 10px;
+    background: #0f1218;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start; /* don't stretch lines; keep each its natural width */
+    gap: 2px;
+  }
+  /* Auto-scroll on: the music drives the vertical glide (no hand-scroll fight), but
+     keep horizontal free so a long line is never clipped during playback. */
+  .scroll.locked {
+    overflow-y: hidden;
   }
   /* CSS multi-column: content fills one column top-to-bottom, then the next to the
      right, extending the strip horizontally into pages. */

@@ -1,6 +1,6 @@
 // Wire protocol shared by Maestro and Players (see ../../04-sync-and-signaling.md).
 
-import type { SongObject } from './model';
+import type { SongObject, Base } from './model';
 
 // The device's job in a session. Maestro = holds audio + clock authority;
 // Player = follows. (Not to be confused with a musical "Role".)
@@ -34,6 +34,13 @@ export interface TransportMsg {
 export interface ChartMsg {
   roleId: string;
   objects: SongObject[];
+}
+
+/** Maestro → joiner on hello: the shared project skeleton (title + timed Base), so
+ *  a device that joined a discovered session adopts the real song, not its own. */
+export interface ProjectMetaMsg {
+  title: string;
+  base: Base;
 }
 
 /** Player clock/ping → Maestro, Maestro clock/pong → Player */

@@ -94,6 +94,14 @@
     color: #8b93a3;
     margin-top: 2px;
   }
+  /* Phones: trim the monospace grid so most lines fit the width without a sideways
+     swipe (kept on one size so chords/lyrics/strum stay aligned). */
+  @media (max-width: 640px) {
+    .text,
+    .strum {
+      font-size: 0.85rem;
+    }
+  }
   /* A typed (non-lyric) flow line, e.g. solo / instrumental. */
   .kind-chip {
     display: inline-block;

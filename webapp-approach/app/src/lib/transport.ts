@@ -3,7 +3,16 @@
 
 import type { Envelope, Seat } from './protocol';
 
-export type StatusHandler = (status: 'connecting' | 'connected' | 'disconnected') => void;
+/** Extra context passed with a status change, so the UI can show WHY a socket
+ *  failed (the url it dialed, the close code/reason) — key for debugging a device
+ *  that loads the page but can't open the WebSocket (e.g. iOS on a blocked LAN). */
+export interface StatusDetail {
+  url?: string;
+  code?: number; // WebSocket CloseEvent.code (1006 = abnormal: network blocked/unreachable)
+  reason?: string;
+  attempts?: number;
+}
+export type StatusHandler = (status: 'connecting' | 'connected' | 'disconnected', detail?: StatusDetail) => void;
 type AnyHandler = (payload: unknown, env: Envelope) => void;
 
 export interface Transport {
@@ -14,7 +23,7 @@ export interface Transport {
   close(): void;
 }
 
-function relayUrl(sessionId: string): string {
+export function relayUrl(sessionId: string): string {
   const q = `?session=${encodeURIComponent(sessionId)}`;
   // Dev: Vite serves pages on :5173, relay runs on :8080.
   // Prod: the relay serves the built app, so WS is same-origin.
@@ -27,6 +36,10 @@ export class WsTransport implements Transport {
   private ws?: WebSocket;
   private handlers = new Map<string, AnyHandler>();
   private statusFn: StatusHandler = () => {};
+  private attempts = 0;
+  /** The last WebSocket URL we dialed — shown in the UI so a device that can't
+   *  connect reveals exactly what host/port it tried (catches localhost mix-ups). */
+  wsUrl = '';
 
   constructor(
     private sessionId: string,
@@ -35,14 +48,24 @@ export class WsTransport implements Transport {
   ) {}
 
   connect(): void {
-    this.statusFn('connecting');
-    this.ws = new WebSocket(relayUrl(this.sessionId));
-    this.ws.onopen = () => this.statusFn('connected');
-    this.ws.onclose = () => {
-      this.statusFn('disconnected');
+    const url = relayUrl(this.sessionId);
+    this.wsUrl = url;
+    this.attempts++;
+    this.statusFn('connecting', { url, attempts: this.attempts });
+    try {
+      this.ws = new WebSocket(url);
+    } catch (e) {
+      // Some browsers throw synchronously (e.g. a disallowed/mixed-content URL).
+      this.statusFn('disconnected', { url, reason: (e as Error).message, attempts: this.attempts });
+      setTimeout(() => this.connect(), 1000);
+      return;
+    }
+    this.ws.onopen = () => this.statusFn('connected', { url });
+    this.ws.onclose = (ev) => {
+      this.statusFn('disconnected', { url, code: ev.code, reason: ev.reason, attempts: this.attempts });
       setTimeout(() => this.connect(), 1000);
     };
-    this.ws.onerror = () => this.statusFn('disconnected');
+    this.ws.onerror = () => this.statusFn('disconnected', { url, attempts: this.attempts });
     this.ws.onmessage = (ev) => {
       let env: Envelope;
       try {

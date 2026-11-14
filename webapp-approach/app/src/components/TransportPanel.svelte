@@ -19,4 +19,15 @@
     <div><span>device</span><b>{s.deviceId}</b></div>
     <div><span>session</span><b>{s.sessionId}</b></div>
   {/if}
+  <div class="wide"><span>socket</span><b>{s.wsUrl || '—'}</b></div>
+  {#if s.conn !== 'connected'}
+    <div class="wide"><span>why</span><b>{s.connInfo || s.conn}</b></div>
+  {/if}
 </div>
+
+<style>
+  .wide {
+    flex-basis: 100%;
+    word-break: break-all;
+  }
+</style>

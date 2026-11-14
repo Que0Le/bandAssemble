@@ -3,7 +3,8 @@
   // a .band.json (added as a NEW project, never clobbering), open / rename /
   // duplicate / export / delete. Everything lives on this device (localStorage for
   // text, IndexedDB for media); a storage meter shows how much room is left.
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
+  import { Lobby } from '../lib/lobby.svelte';
   import {
     listProjects,
     duplicateProject,
@@ -41,6 +42,19 @@
     sp.set('project', id);
     location.search = sp.toString();
   }
+
+  // --- live sessions on the network (discovery) ---
+  // Listen on the lobby for Maestros advertising a live session; show them so a
+  // device with only the sample project can still jump into the band's song.
+  const lobby = new Lobby(Math.random().toString(36).slice(2, 8));
+  const liveSessions = $derived(Object.values(lobby.hosts).sort((a, b) => b.seenAt - a.seenAt));
+  function join(code: string) {
+    const sp = new URLSearchParams();
+    sp.set('session', code);
+    sp.set('seat', 'player'); // straight into the Player seat; charts stream from the host
+    location.search = sp.toString();
+  }
+  onDestroy(() => lobby.close());
 
   // --- import ---
   let msg = $state('');
@@ -102,6 +116,7 @@
       persisted = null;
     }
     await refreshMedia();
+    lobby.connect(); // observe only — the Home page never hosts
   });
   async function keepStorage() {
     persisted = await requestPersist();
@@ -139,6 +154,24 @@
   </div>
 
   {#if msg}<p class="msg">{msg}</p>{/if}
+
+  {#if liveSessions.length}
+    <div class="live">
+      <h2>On the network</h2>
+      <ul class="live-list">
+        {#each liveSessions as h (h.device)}
+          <li class="live-card">
+            <span class="dot" aria-hidden="true"></span>
+            <div class="live-main">
+              <span class="live-ttl">{h.title}</span>
+              <span class="live-sub">live session · code {h.code}</span>
+            </div>
+            <button class="btn primary" onclick={() => join(h.code)}>Join</button>
+          </li>
+        {/each}
+      </ul>
+    </div>
+  {/if}
 
   {#if projects.length === 0}
     <div class="empty">No projects yet. Create one above, or import a file.</div>
@@ -231,6 +264,68 @@
     padding: 28px;
     text-align: center;
     color: #8b93a3;
+  }
+  .live {
+    margin-bottom: 18px;
+  }
+  .live h2 {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #8b93a3;
+    margin: 0 0 8px;
+  }
+  .live-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .live-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid #2f6b45;
+    border-radius: 10px;
+    background: #10211a;
+    padding: 10px 12px;
+  }
+  .dot {
+    flex: none;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #48bb78;
+    box-shadow: 0 0 0 0 rgba(72, 187, 120, 0.6);
+    animation: pulse 1.8s infinite;
+  }
+  @keyframes pulse {
+    70% {
+      box-shadow: 0 0 0 7px rgba(72, 187, 120, 0);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(72, 187, 120, 0);
+    }
+  }
+  .live-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .live-ttl {
+    font-weight: 650;
+    color: #e6edf3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .live-sub {
+    color: #8b93a3;
+    font-size: 0.76rem;
   }
   .list {
     list-style: none;

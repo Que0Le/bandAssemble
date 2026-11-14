@@ -31,6 +31,15 @@
   {/if}
 </header>
 
+{#if session && SEAT && session.conn !== 'connected'}
+  <div class="wsdiag" role="status">
+    <span class="lbl">no sync —</span>
+    trying <code>{session.wsUrl || '…'}</code>
+    {#if session.connInfo}<span class="why">· {session.connInfo}</span>{/if}
+    {#if session.connAttempts > 1}<span class="att">· attempt {session.connAttempts}</span>{/if}
+  </div>
+{/if}
+
 {#if !SEAT && isNew}
   <NewProject />
 {:else if !SEAT && !hasProject}
@@ -114,5 +123,31 @@
   .chart-fill {
     flex: 1;
     min-height: 0;
+  }
+  /* Connection diagnostic strip — only while a seat is open and not connected. */
+  .wsdiag {
+    margin: 0 16px 8px;
+    padding: 7px 12px;
+    background: #241c0f;
+    border: 1px solid #4a3a1f;
+    border-radius: 8px;
+    color: #ffcf6b;
+    font-size: 0.78rem;
+    line-height: 1.35;
+    word-break: break-all;
+  }
+  .wsdiag .lbl {
+    font-weight: 650;
+  }
+  .wsdiag code {
+    font-family: ui-monospace, monospace;
+    font-size: 0.74rem;
+    color: #e6edf3;
+  }
+  .wsdiag .why {
+    color: #ffb4b0;
+  }
+  .wsdiag .att {
+    color: #8b93a3;
   }
 </style>

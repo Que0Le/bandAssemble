@@ -9,12 +9,22 @@
 // "Role" now means the musical part and lives in the data model, not here.
 
 import { WsTransport } from './lib/transport';
+import type { StatusDetail } from './lib/transport';
 import { ClockSync } from './lib/clockSync';
 import { MasterAudio } from './lib/audio';
 import { labels } from './lib/model';
 import type { SongObject } from './lib/model';
-import { charts, setChart, meta, activeId } from './view.svelte';
-import type { Seat, TransportMsg, PingMsg, PongMsg, LoopRange, ChartMsg } from './lib/protocol';
+import { charts, setChart, meta, activeId, adoptProjectMeta } from './view.svelte';
+import { Lobby } from './lib/lobby.svelte';
+import type {
+  Seat,
+  TransportMsg,
+  PingMsg,
+  PongMsg,
+  LoopRange,
+  ChartMsg,
+  ProjectMetaMsg,
+} from './lib/protocol';
 
 const params = new URLSearchParams(location.search);
 const seatParam = params.get('seat');
@@ -29,6 +39,21 @@ export const SEAT: Mode | null =
 // deliberate cross-device band where the project ids differ.
 const SESSION_ID = params.get('session') || activeId;
 const DEVICE_ID = Math.random().toString(36).slice(2, 8);
+
+/** Turn a socket close/error into a one-line, human explanation for the UI. */
+function describeClose(d?: StatusDetail): string {
+  if (!d) return 'no connection';
+  const hint =
+    d.code === 1006
+      ? 'network blocked or unreachable — check Wi-Fi / iCloud Private Relay'
+      : d.code === 1015
+        ? 'TLS failure'
+        : d.code === 1000 || d.code === 1001
+          ? 'closed normally'
+          : (d.reason ?? '');
+  if (d.code != null) return `closed ${d.code}${hint ? ' · ' + hint : ''}`;
+  return d.reason ? d.reason : 'no connection (socket error before it opened)';
+}
 
 interface Follow {
   state: 'playing' | 'paused';
@@ -53,10 +78,16 @@ export class Session {
   offset = $state(0);
   rtt = $state(Infinity);
   lastSync = $state(0);
+  // Connection diagnostics (surfaced in the UI when conn !== 'connected'), so a
+  // device that loads the page but can't open the socket shows what/why.
+  wsUrl = $state('');
+  connInfo = $state(''); // human close/error summary, e.g. "closed 1006 · network blocked or unreachable"
+  connAttempts = $state(0);
 
   private transport: WsTransport;
   private clock: ClockSync;
   private audio?: MasterAudio;
+  private lobby?: Lobby; // Maestro only: advertises this live session for discovery
 
   // Maestro authoritative state
   private tState: 'playing' | 'paused' = 'paused';
@@ -91,6 +122,8 @@ export class Session {
       });
       this.transport.on('session/hello', () => {
         this.broadcast();
+        // Give a joiner the whole project: the song skeleton first, then charts.
+        this.transport.send('project/meta', { title: meta.title, base: meta.base });
         this.distributeCharts(); // bring a late joiner up to date
       });
       this.transport.on('chart/handoff', (p: ChartMsg) => {
@@ -116,6 +149,7 @@ export class Session {
         this.rtt = this.clock.bestRtt;
         this.lastSync = this.clock.lastSync;
       });
+      this.transport.on('project/meta', (p: ProjectMetaMsg) => adoptProjectMeta(p.title, p.base));
       this.transport.on('chart/update', (p: ChartMsg) => setChart(p.roleId, p.objects));
     }
   }
@@ -136,17 +170,25 @@ export class Session {
   }
 
   start() {
-    this.transport.onStatus((s) => {
+    this.transport.onStatus((s, d) => {
       this.conn = s;
+      if (d?.url) this.wsUrl = d.url;
+      if (d?.attempts) this.connAttempts = d.attempts;
       if (s === 'connected') {
+        this.connInfo = '';
         this.transport.send('session/hello', { seat: this.seat });
         if (this.seat === 'player') this.clock.start();
         if (this.seat === 'maestro') this.broadcast();
+      } else if (s === 'disconnected') {
+        this.connInfo = describeClose(d);
       }
     });
     this.transport.connect();
 
     if (this.seat === 'maestro') {
+      // Advertise this live session on the lobby so other devices can discover it.
+      this.lobby = new Lobby(DEVICE_ID);
+      this.lobby.connect(() => ({ code: this.sessionId, projectId: activeId, title: meta.title }));
       setInterval(() => {
         if (this.tState === 'playing') this.broadcast();
       }, 1500);

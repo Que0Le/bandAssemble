@@ -4,11 +4,17 @@
   // directly, a Player sends the same thing as an intent.
   import { session } from '../session.svelte';
   import { labels } from '../lib/model';
-  import { meta } from '../view.svelte';
+  import { meta, currentObjects } from '../view.svelte';
   const s = session!;
   const isMaestro = s.seat === 'maestro';
 
-  const marks = $derived(labels(meta.base.lyrics));
+  // Jump targets come from the chart you're viewing — its labels carry this part's
+  // real section times. Fall back to the Base skeleton when the chart has none
+  // (e.g. a plain lyric chart with no section markers).
+  const marks = $derived.by(() => {
+    const own = labels(currentObjects());
+    return own.length ? own : labels(meta.base.lyrics);
+  });
   const activeIdx = $derived.by(() => {
     let a = -1;
     for (let i = 0; i < marks.length; i++) {

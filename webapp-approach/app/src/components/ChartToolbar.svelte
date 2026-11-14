@@ -59,10 +59,20 @@
 <style>
   .toolbar {
     display: flex;
+    flex-wrap: wrap; /* phones: wrap instead of overflowing off the right edge */
     align-items: center;
     gap: 10px;
     margin-bottom: 8px;
     user-select: none;
+  }
+  /* Mouse-centric hint; drop it on narrow/touch screens where it just eats width. */
+  @media (max-width: 640px) {
+    .hint {
+      display: none;
+    }
+    .spacer {
+      flex-basis: 100%; /* push the right-hand buttons onto their own row */
+    }
   }
   .spacer {
     flex: 1;

@@ -47,11 +47,38 @@ export const meta = $state<{ id: string; title: string; base: Base }>({
   title: active.title,
   base: active.base,
 });
-export const view = $state<{ roleId: string; editing: boolean; autoScroll: boolean }>({
+/** How the chart is laid out: the two-page horizontal pager, or a single
+ *  full-width column that scrolls down (teleprompter) — better on a phone held
+ *  in portrait. Device-local; persisted so a phone stays in 'scroll'. */
+export type ChartMode = 'pages' | 'scroll';
+const CHART_MODE_KEY = 'bandassemble:chartMode';
+function initialChartMode(): ChartMode {
+  try {
+    const v = localStorage.getItem(CHART_MODE_KEY);
+    if (v === 'pages' || v === 'scroll') return v;
+  } catch {
+    /* blocked storage — fall through to the width default */
+  }
+  // No stored choice: default phones to the vertical scroll, wider screens to pages.
+  return typeof window !== 'undefined' && window.innerWidth < 700 ? 'scroll' : 'pages';
+}
+
+export const view = $state<{ roleId: string; editing: boolean; autoScroll: boolean; chartMode: ChartMode }>({
   roleId: active.roles[0]?.id ?? '',
   editing: false,
   autoScroll: true, // auto-turn pages while playing; off = flip by hand (seeks still scroll)
+  chartMode: initialChartMode(),
 });
+
+/** Switch the chart layout and remember it on this device. */
+export function setChartMode(m: ChartMode): void {
+  view.chartMode = m;
+  try {
+    localStorage.setItem(CHART_MODE_KEY, m);
+  } catch {
+    /* ignore */
+  }
+}
 export const roles = $state<Role[]>(active.roles.map((r) => ({ ...r })));
 export const charts = $state<Record<string, SongObject[]>>(chartsToObjects(active));
 
@@ -131,6 +158,15 @@ export async function storeProjectMedia(file: File): Promise<MediaMeta> {
   setBaseAudio(file.name, m.durationSec);
   void requestPersist();
   return m;
+}
+
+/** Adopt a joined session's shared project skeleton (title + Base) so a device
+ *  that joined a discovered session shows the real song, not its own template.
+ *  The Roles + charts still arrive separately via setChart. */
+export function adoptProjectMeta(title: string, base: Base): void {
+  meta.title = title;
+  meta.base = base;
+  save();
 }
 
 /** Apply a chart (local edit or distributed). Auto-registers an unknown Role so
