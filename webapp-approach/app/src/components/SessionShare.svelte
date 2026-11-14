@@ -12,22 +12,29 @@
   const loopback = isLoopbackHost();
 
   let open = $state(false);
-  let urlEl = $state<HTMLInputElement>();
+  let urlEl = $state<HTMLDivElement>();
   let copied = $state(false);
+
+  function selectUrl() {
+    if (!urlEl) return;
+    const sel = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(urlEl);
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+  }
 
   async function copy() {
     try {
       await navigator.clipboard.writeText(link); // https / localhost only
     } catch {
       // Plain http on a LAN IP isn't a "secure context", so the async clipboard
-      // API is missing — fall back to select + execCommand('copy').
+      // API is missing — fall back to selecting the link + execCommand('copy').
       try {
-        urlEl?.focus();
-        urlEl?.select();
-        urlEl?.setSelectionRange(0, link.length);
+        selectUrl();
         document.execCommand('copy');
       } catch {
-        /* field stays selected for a manual Ctrl+C */
+        /* link stays selected for a manual Ctrl+C */
       }
     }
     copied = true;
@@ -58,13 +65,9 @@
       <div class="qrow">
         <div class="qr">{@html qr}</div>
         <div class="jurl">
-          <input
-            class="urlbox"
-            bind:this={urlEl}
-            value={link}
-            readonly
-            onfocus={(e) => (e.target as HTMLInputElement).select()}
-          />
+          <!-- A wrapping box (not an <input>, which can't wrap) so the whole LAN
+               link is visible at once; user-select:all means a tap selects it all. -->
+          <div class="urlbox" bind:this={urlEl}>{link}</div>
           <button class="mini" onclick={copy}>{copied ? 'Copied' : 'Copy link'}</button>
         </div>
       </div>
@@ -138,11 +141,16 @@
     width: 100%;
     font-family: ui-monospace, monospace;
     font-size: 0.74rem;
+    line-height: 1.5;
     background: #0b0e13;
     color: #cfe8ff;
     border: 1px solid #2a3340;
     border-radius: 8px;
     padding: 8px 10px;
+    /* wrap the long LAN link onto multiple lines instead of clipping it */
+    word-break: break-all;
+    overflow-wrap: anywhere;
+    user-select: all; /* one tap selects the whole link for manual copy */
   }
   .mini {
     cursor: pointer;

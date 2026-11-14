@@ -7,7 +7,8 @@
 import { cloneObjects } from './lib/model';
 import type { Role, SongObject, Base, Chart, Project } from './lib/model';
 import {
-  seedSampleIfEmpty,
+  removePristineSample,
+  listProjects,
   loadProject,
   saveProject,
   importProjectFromText,
@@ -22,19 +23,47 @@ import { slug, r2, download } from './lib/util';
 
 const params = new URLSearchParams(location.search);
 
-/** Which project to open: ?project=, else last opened, else the seeded sample. */
-function resolveActiveId(): string {
-  const fallback = seedSampleIfEmpty(); // guarantees at least one loadable project
-  const wanted = params.get('project');
-  if (wanted && loadProject(wanted)) return wanted;
-  const last = getLastOpened();
-  if (last && loadProject(last)) return last;
-  return fallback;
+// No bundled demo any more: clear the pristine sample if it's still lying around.
+removePristineSample();
+
+/** A transient, UNSAVED placeholder project for when nothing is stored yet (the
+ *  Home list is empty). It never hits storage; creating/opening a real project
+ *  reloads onto that one instead. */
+function blankProject(): Project {
+  return {
+    schemaVersion: 4,
+    id: crypto.randomUUID(),
+    title: 'Untitled',
+    base: { lengthSec: 0, lyrics: [] },
+    roles: [],
+    charts: {},
+  };
 }
 
-export const activeId = resolveActiveId();
-setLastOpened(activeId);
-const active: Project = loadProject(activeId)!; // resolveActiveId guarantees this loads
+/** Which project to open: ?project=, else last opened, else the most recent one,
+ *  else a blank in-memory placeholder (nothing is stored yet). */
+function resolveActive(): Project {
+  const wanted = params.get('project');
+  if (wanted) {
+    const p = loadProject(wanted);
+    if (p) return p;
+  }
+  const last = getLastOpened();
+  if (last) {
+    const p = loadProject(last);
+    if (p) return p;
+  }
+  const first = listProjects()[0];
+  if (first) {
+    const p = loadProject(first.id);
+    if (p) return p;
+  }
+  return blankProject();
+}
+
+const active: Project = resolveActive();
+export const activeId = active.id;
+if (loadProject(active.id)) setLastOpened(active.id); // don't persist the blank placeholder
 
 function chartsToObjects(p: Project): Record<string, SongObject[]> {
   const ch: Record<string, SongObject[]> = {};

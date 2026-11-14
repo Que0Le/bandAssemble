@@ -238,10 +238,13 @@ export function setLastOpened(id: string | null): void {
 /** Seed the bundled sample once so a fresh install isn't empty. Preserves an
  *  existing saved copy (e.g. from before the registry existed). Returns an id
  *  that is guaranteed to load. */
-export function seedSampleIfEmpty(): string {
-  const idx = readIndex();
-  if (idx.length > 0) return idx[0].id;
-  const existing = loadProject(PROJECT.id); // migrate a pre-registry install
-  saveProject(existing ?? structuredClone(PROJECT));
-  return PROJECT.id;
+/** One-time cleanup: drop the bundled demo project if it's still untouched. The
+ *  app no longer auto-seeds it, so once removed it stays gone; this also clears
+ *  the pristine copy from devices that already have it. A demo the user actually
+ *  edited is NOT touched — that's their data; they can delete it from the list. */
+export function removePristineSample(): void {
+  const existing = loadProject(PROJECT.id);
+  if (existing && JSON.stringify(existing) === JSON.stringify(PROJECT)) {
+    void deleteProject(PROJECT.id);
+  }
 }
