@@ -14,7 +14,7 @@ import { ClockSync } from './lib/clockSync';
 import { MasterAudio } from './lib/audio';
 import { labels } from './lib/model';
 import type { SongObject } from './lib/model';
-import { charts, setChart, meta, activeId, adoptProjectMeta } from './view.svelte';
+import { charts, roles, setChart, meta, activeId, adoptProject } from './view.svelte';
 import { Lobby } from './lib/lobby.svelte';
 import type {
   Seat,
@@ -23,7 +23,7 @@ import type {
   PongMsg,
   LoopRange,
   ChartMsg,
-  ProjectMetaMsg,
+  ProjectSyncMsg,
 } from './lib/protocol';
 
 const params = new URLSearchParams(location.search);
@@ -122,9 +122,17 @@ export class Session {
       });
       this.transport.on('session/hello', () => {
         this.broadcast();
-        // Give a joiner the whole project: the song skeleton first, then charts.
-        this.transport.send('project/meta', { id: activeId, title: meta.title, base: meta.base });
-        this.distributeCharts(); // bring a late joiner up to date
+        // Give a joiner the WHOLE project in one authoritative message — skeleton
+        // plus every role and chart — so it REPLACES any stale local set rather
+        // than merging onto it (a leftover role would otherwise keep a stale chart
+        // and mis-highlight). One message also means no empty intermediate state.
+        this.transport.send('project/sync', {
+          id: activeId,
+          title: meta.title,
+          base: meta.base,
+          roles: [...roles],
+          charts: { ...charts },
+        });
       });
       this.transport.on('chart/handoff', (p: ChartMsg) => {
         setChart(p.roleId, p.objects); // apply, then distribute to everyone
@@ -153,7 +161,9 @@ export class Session {
         this.rtt = this.clock.bestRtt;
         this.lastSync = this.clock.lastSync;
       });
-      this.transport.on('project/meta', (p: ProjectMetaMsg) => adoptProjectMeta(p.id, p.title, p.base));
+      this.transport.on('project/sync', (p: ProjectSyncMsg) =>
+        adoptProject(p.id, p.title, p.base, p.roles, p.charts),
+      );
       this.transport.on('chart/update', (p: ChartMsg) => setChart(p.roleId, p.objects));
     }
   }
@@ -164,13 +174,6 @@ export class Session {
     setChart(roleId, objects);
     if (this.seat === 'maestro') this.transport.send('chart/update', { roleId, objects });
     else this.transport.send('chart/handoff', { roleId, objects });
-  }
-
-  private distributeCharts() {
-    if (this.seat !== 'maestro') return;
-    for (const roleId of Object.keys(charts)) {
-      this.transport.send('chart/update', { roleId, objects: charts[roleId] });
-    }
   }
 
   start() {

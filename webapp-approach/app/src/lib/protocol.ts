@@ -1,6 +1,6 @@
 // Wire protocol shared by Maestro and Players (see ../../04-sync-and-signaling.md).
 
-import type { SongObject, Base } from './model';
+import type { SongObject, Base, Role } from './model';
 
 // The device's job in a session. Maestro = holds audio + clock authority;
 // Player = follows. (Not to be confused with a musical "Role".)
@@ -36,14 +36,18 @@ export interface ChartMsg {
   objects: SongObject[];
 }
 
-/** Maestro → joiner on hello: the shared project skeleton (id + title + timed Base),
- *  so a device that joined a discovered session adopts the real song as its OWN
- *  local project (keyed by `id`) instead of overwriting whatever template it had
- *  open (e.g. the seeded sample). */
-export interface ProjectMetaMsg {
+/** Maestro → joiner on hello: the AUTHORITATIVE whole project (id + title + timed
+ *  Base + every Role and its chart). The joiner REPLACES its entire role/chart set
+ *  with this — roles the Maestro doesn't send are dropped — so a stale local chart
+ *  (a leftover role, or diverged timings) can never linger and mis-highlight. It
+ *  still lands as a SEPARATE local project keyed by `id`, never clobbering whatever
+ *  template the device had open (e.g. the seeded sample). */
+export interface ProjectSyncMsg {
   id: string;
   title: string;
   base: Base;
+  roles: Role[];
+  charts: Record<string, SongObject[]>;
 }
 
 /** Player clock/ping → Maestro, Maestro clock/pong → Player */

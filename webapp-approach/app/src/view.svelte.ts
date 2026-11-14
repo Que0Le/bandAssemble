@@ -160,22 +160,34 @@ export async function storeProjectMedia(file: File): Promise<MediaMeta> {
   return m;
 }
 
-/** Adopt a joined session's shared project (id + title + Base) so a device that
- *  joined a discovered session shows the real song, not its own template — and,
- *  crucially, saves it as a SEPARATE local project keyed by the Maestro's id, so
- *  distribution never overwrites whatever this device had open (e.g. the sample).
- *  The Roles + charts arrive right after via setChart (distributeCharts on hello). */
-export function adoptProjectMeta(id: string, title: string, base: Base): void {
-  if (id && id !== meta.id) {
-    // First time we switch onto this joined song: retarget saves to its own id
-    // and clear the old template's roles/charts so only the real ones remain.
-    meta.id = id;
-    roles.length = 0;
-    for (const k of Object.keys(charts)) delete charts[k];
+/** Adopt a joined session's AUTHORITATIVE project (id + title + Base + the full
+ *  role & chart set) so a device that joined a discovered session mirrors the
+ *  Maestro exactly. It REPLACES the whole role/chart set — any role the Maestro
+ *  doesn't send is dropped — so a stale local chart (a leftover role, or diverged
+ *  timings) can never linger and put the cursor on the wrong line. Lands as a
+ *  SEPARATE local project keyed by the Maestro's id, so it never clobbers whatever
+ *  template the device had open (e.g. the seeded sample). */
+export function adoptProject(
+  id: string,
+  title: string,
+  base: Base,
+  incomingRoles: Role[],
+  incomingCharts: Record<string, SongObject[]>,
+): void {
+  if (id) {
+    meta.id = id; // retarget saves to the joined song's own id
     setLastOpened(id);
   }
   meta.title = title;
   meta.base = base;
+  // Replace roles wholesale (drop any the Maestro didn't send).
+  roles.length = 0;
+  for (const r of incomingRoles) roles.push({ ...r });
+  // Replace charts wholesale.
+  for (const k of Object.keys(charts)) delete charts[k];
+  for (const k of Object.keys(incomingCharts)) charts[k] = incomingCharts[k];
+  // Keep the current role if it still exists, else land on the first real one.
+  if (!roles.some((r) => r.id === view.roleId)) view.roleId = roles[0]?.id ?? '';
   save();
 }
 
