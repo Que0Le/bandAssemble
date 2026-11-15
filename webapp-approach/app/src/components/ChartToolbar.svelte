@@ -1,6 +1,7 @@
 <script lang="ts">
   // Chart toolbar: Role switcher, add-a-Role, Copy sheet, and the Edit toggle.
   import { view, roles, addRole, currentObjects, meta } from '../view.svelte';
+  import { session, SEAT } from '../session.svelte';
   import { sheet } from '../lib/serialize';
   import { copyText } from '../lib/clipboard';
 
@@ -10,6 +11,16 @@
     newRole = '';
     view.editing = false;
     view.roleId = id;
+  }
+
+  // Delete the selected Role (Maestro only; the project keeps at least one). A
+  // two-step inline confirm, so no accidental deletes and no blocking dialog.
+  let confirmDel = $state(false);
+  const canDelete = $derived(SEAT === 'maestro' && roles.length > 1);
+  const curRoleLabel = $derived(roles.find((r) => r.id === view.roleId)?.label ?? '');
+  function deleteRoleNow() {
+    session?.removeRole(view.roleId);
+    confirmDel = false;
   }
 
   let copied = $state(false);
@@ -29,6 +40,21 @@
       {#each roles as r}<option value={r.id}>{r.label}</option>{/each}
     </select>
   </label>
+  {#if canDelete}
+    {#if confirmDel}
+      <span class="del-confirm">
+        Delete “{curRoleLabel}”?
+        <button class="btn danger" onclick={deleteRoleNow}>Delete</button>
+        <button class="btn" onclick={() => (confirmDel = false)}>Cancel</button>
+      </span>
+    {:else}
+      <button
+        class="btn del"
+        title={`Delete the “${curRoleLabel}” role and its chart`}
+        onclick={() => (confirmDel = true)}>🗑</button
+      >
+    {/if}
+  {/if}
   <input
     class="new-role"
     placeholder="+ role"
@@ -116,5 +142,26 @@
     color: #bdf0cf;
     border-color: #2f6b45;
     background: #16271f;
+  }
+  .btn.del {
+    padding: 5px 9px;
+  }
+  .btn.del:hover {
+    border-color: #fc8181;
+  }
+  .del-confirm {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8rem;
+    color: #e6edf3;
+  }
+  .btn.danger {
+    color: #ffd7d7;
+    border-color: #6b2f2f;
+    background: #271616;
+  }
+  .btn.danger:hover {
+    border-color: #fc8181;
   }
 </style>

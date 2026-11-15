@@ -14,7 +14,16 @@ import { ClockSync } from './lib/clockSync';
 import { MasterAudio } from './lib/audio';
 import { labels } from './lib/model';
 import type { SongObject } from './lib/model';
-import { charts, roles, view, setChart, meta, activeId, adoptProject } from './view.svelte';
+import {
+  charts,
+  roles,
+  view,
+  setChart,
+  removeRole as applyRemoveRole,
+  meta,
+  activeId,
+  adoptProject,
+} from './view.svelte';
 import { Lobby } from './lib/lobby.svelte';
 import type {
   Seat,
@@ -166,6 +175,7 @@ export class Session {
         adoptProject(p.id, p.title, p.base, p.roles, p.charts, p.focusRole),
       );
       this.transport.on('chart/update', (p: ChartMsg) => setChart(p.roleId, p.objects));
+      this.transport.on('role/remove', (p: { roleId: string }) => applyRemoveRole(p.roleId));
     }
   }
 
@@ -175,6 +185,13 @@ export class Session {
     setChart(roleId, objects);
     if (this.seat === 'maestro') this.transport.send('chart/update', { roleId, objects });
     else this.transport.send('chart/handoff', { roleId, objects });
+  }
+
+  /** Maestro: delete a Role everywhere. Applies locally, then tells joined players
+   *  to drop it too (new joiners already get the trimmed set via project/sync). */
+  removeRole(roleId: string) {
+    if (this.seat !== 'maestro') return;
+    if (applyRemoveRole(roleId)) this.transport.send('role/remove', { roleId });
   }
 
   start() {

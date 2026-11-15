@@ -156,6 +156,19 @@ export function addRole(label: string): string {
   return id;
 }
 
+/** Remove a Role and its chart. Keeps at least one Role (a project needs one), so
+ *  this is a no-op on the last. If the removed Role was being viewed, switch to
+ *  another. Returns whether it was removed (false = unknown id, or it's the last). */
+export function removeRole(roleId: string): boolean {
+  const i = roles.findIndex((r) => r.id === roleId);
+  if (i < 0 || roles.length <= 1) return false;
+  roles.splice(i, 1);
+  delete charts[roleId];
+  if (view.roleId === roleId) view.roleId = roles[0]?.id ?? '';
+  save();
+  return true;
+}
+
 /** Sources a Role's chart can be cloned from: the Base, plus any other Role that
  *  already has content (future: pick between variants). Excludes the target. */
 export function cloneSources(targetRoleId: string): Array<{ key: string; label: string }> {
