@@ -37,6 +37,7 @@ export class WsTransport implements Transport {
   private handlers = new Map<string, AnyHandler>();
   private statusFn: StatusHandler = () => {};
   private attempts = 0;
+  private openTimer?: ReturnType<typeof setTimeout>;
   /** The last WebSocket URL we dialed — shown in the UI so a device that can't
    *  connect reveals exactly what host/port it tried (catches localhost mix-ups). */
   wsUrl = '';
@@ -64,6 +65,7 @@ export class WsTransport implements Transport {
   }
 
   connect(): void {
+    clearTimeout(this.openTimer);
     // Drop any previous socket's handlers first, so a resume-triggered reconnect
     // can't leave two sockets (or two reconnect loops) racing.
     if (this.ws) {
@@ -86,8 +88,22 @@ export class WsTransport implements Transport {
       setTimeout(() => this.connect(), 1000);
       return;
     }
-    this.ws.onopen = () => this.statusFn('connected', { url });
+    // Connect watchdog: iOS can leave a cold-start socket hung in CONNECTING —
+    // it never opens AND never fires close/error, so nothing else would retry and
+    // a fresh joiner is stuck on a blank screen. If it hasn't opened in time, tear
+    // it down and dial again (the next attempt usually lands).
+    this.openTimer = setTimeout(() => {
+      if (this.ws?.readyState !== WebSocket.OPEN) {
+        this.statusFn('disconnected', { url, reason: 'connect timed out', attempts: this.attempts });
+        this.connect();
+      }
+    }, 5000);
+    this.ws.onopen = () => {
+      clearTimeout(this.openTimer);
+      this.statusFn('connected', { url });
+    };
     this.ws.onclose = (ev) => {
+      clearTimeout(this.openTimer);
       this.statusFn('disconnected', { url, code: ev.code, reason: ev.reason, attempts: this.attempts });
       setTimeout(() => this.connect(), 1000);
     };

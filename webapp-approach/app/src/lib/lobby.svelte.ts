@@ -33,6 +33,7 @@ export class Lobby {
   private ws?: WebSocket;
   private beaconTimer?: ReturnType<typeof setInterval>;
   private pruneTimer?: ReturnType<typeof setInterval>;
+  private openTimer?: ReturnType<typeof setTimeout>;
   private closed = false;
   private beacon?: () => Beacon | null;
 
@@ -54,8 +55,23 @@ export class Lobby {
 
   private open(): void {
     if (this.closed) return;
+    clearTimeout(this.openTimer);
     this.ws = new WebSocket(relayUrl(LOBBY_ROOM));
+    // Same cold-start guard as the main transport: if this socket hangs in
+    // CONNECTING (iOS), tear it down and redial so the Home list isn't stuck empty.
+    this.openTimer = setTimeout(() => {
+      if (this.ws && this.ws.readyState !== WebSocket.OPEN && !this.closed) {
+        this.ws.onclose = null;
+        try {
+          this.ws.close();
+        } catch {
+          /* already closed */
+        }
+        this.open();
+      }
+    }, 5000);
     this.ws.onopen = () => {
+      clearTimeout(this.openTimer);
       if (!this.beacon) return;
       this.sendBeacon();
       this.beaconTimer = setInterval(() => this.sendBeacon(), BEACON_MS);
@@ -81,6 +97,7 @@ export class Lobby {
       }
     };
     this.ws.onclose = () => {
+      clearTimeout(this.openTimer);
       clearInterval(this.beaconTimer);
       if (!this.closed) setTimeout(() => this.open(), 1500); // reconnect
     };
@@ -96,6 +113,7 @@ export class Lobby {
 
   close(): void {
     this.closed = true;
+    clearTimeout(this.openTimer);
     clearInterval(this.beaconTimer);
     clearInterval(this.pruneTimer);
     try {
