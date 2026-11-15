@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { session, SEAT } from './session.svelte';
-  import { view, saveJoinedCopy } from './view.svelte';
+  import { view, saveJoinedCopy, meta } from './view.svelte';
   import Home from './components/Home.svelte';
   import NewProject from './components/NewProject.svelte';
   import RoleChooser from './components/RoleChooser.svelte';
@@ -68,6 +68,10 @@
   <section class="stage">
     <div class="topbar">
       <div class="role-badge {SEAT}">{SEAT === 'maestro' ? '🎛️ MAESTRO' : '📱 PLAYER'}</div>
+      <div class="now" title="Current project · session code">
+        <span class="now-title">{meta.title}</span>
+        {#if session}<span class="now-sess">session {session.sessionId}</span>{/if}
+      </div>
       {#if view.ephemeral}
         <button
           class="savecopy"
@@ -185,6 +189,27 @@
   }
   .logo:hover {
     color: var(--accent);
+  }
+  /* Current project name + session code, shown in the performance topbar. */
+  .now {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+    min-width: 0;
+  }
+  .now-title {
+    font-weight: 600;
+    color: var(--fg);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 48vw;
+  }
+  .now-sess {
+    font-size: 0.72rem;
+    color: var(--muted);
+    font-family: var(--mono);
+    letter-spacing: 0.04em;
   }
   /* "Save a copy" — offered only while on a joined (ephemeral) session. */
   .savecopy {

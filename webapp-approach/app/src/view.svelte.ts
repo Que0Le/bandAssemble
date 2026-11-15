@@ -26,6 +26,36 @@ const params = new URLSearchParams(location.search);
 // No bundled demo any more: clear the pristine sample if it's still lying around.
 removePristineSample();
 
+const sessionCode = params.get('session');
+
+// Joined-session RESUME cache. A player that joined a live session keeps nothing
+// in the project list (ephemeral), but we stash the last-adopted project here,
+// tagged with its session code, so a RELOAD (iOS screen-lock, pull-to-refresh)
+// re-hydrates the chart instantly instead of showing a blank screen; the live
+// sync then refreshes it once the socket reconnects. Not in the registry index,
+// so it never clutters the project list.
+const JOINED_KEY = 'bandassemble:joined';
+interface JoinedCache {
+  session: string;
+  project: Project;
+}
+function readJoined(): JoinedCache | null {
+  try {
+    const v = localStorage.getItem(JOINED_KEY);
+    return v ? (JSON.parse(v) as JoinedCache) : null;
+  } catch {
+    return null;
+  }
+}
+function writeJoined(project: Project): void {
+  if (!sessionCode) return;
+  try {
+    localStorage.setItem(JOINED_KEY, JSON.stringify({ session: sessionCode, project }));
+  } catch {
+    /* storage blocked — resume just won't be available */
+  }
+}
+
 /** A transient, UNSAVED placeholder project for when nothing is stored yet (the
  *  Home list is empty). It never hits storage; creating/opening a real project
  *  reloads onto that one instead. */
@@ -40,8 +70,11 @@ function blankProject(): Project {
   };
 }
 
+let resumedJoin = false;
+
 /** Which project to open: ?project=, else last opened, else the most recent one,
- *  else a blank in-memory placeholder (nothing is stored yet). */
+ *  else (for a joined session being reloaded) the resume cache, else a blank
+ *  in-memory placeholder (nothing is stored yet). */
 function resolveActive(): Project {
   const wanted = params.get('project');
   if (wanted) {
@@ -58,12 +91,21 @@ function resolveActive(): Project {
     const p = loadProject(first.id);
     if (p) return p;
   }
+  // Reloading INTO a joined session (seat=player&session=…): show the cached
+  // chart right away rather than a blank screen while we reconnect.
+  if (sessionCode) {
+    const r = readJoined();
+    if (r && r.session === sessionCode && r.project) {
+      resumedJoin = true;
+      return r.project;
+    }
+  }
   return blankProject();
 }
 
 const active: Project = resolveActive();
 export const activeId = active.id;
-if (loadProject(active.id)) setLastOpened(active.id); // don't persist the blank placeholder
+if (!resumedJoin && loadProject(active.id)) setLastOpened(active.id); // don't persist blank/resume
 
 function chartsToObjects(p: Project): Record<string, SongObject[]> {
   const ch: Record<string, SongObject[]> = {};
@@ -104,9 +146,10 @@ export const view = $state<{
   autoScroll: true, // auto-turn pages while playing; off = flip by hand (seeks still scroll)
   chartMode: initialChartMode(),
   // A joined (discovered) session is live-only: we hold the host's project in
-  // memory and persist NOTHING, so a device never accumulates copies of songs it
-  // merely visited. "Save a copy" (saveJoinedCopy) turns it into a real project.
-  ephemeral: false,
+  // memory and persist NOTHING in the project list, so a device never accumulates
+  // copies of songs it merely visited. (A reload is restored from the resume cache,
+  // not the list.) "Save a copy" (saveJoinedCopy) turns it into a real project.
+  ephemeral: resumedJoin,
 });
 
 /** Switch the chart layout and remember it on this device. */
@@ -249,7 +292,10 @@ export function adoptProject(
     const focus = focusRole && roles.some((r) => r.id === focusRole) ? focusRole : undefined;
     view.roleId = focus ?? roles[0]?.id ?? '';
   }
-  // Deliberately no save()/setLastOpened — the live arrangement stays in memory.
+  // Not in the project list / no setLastOpened, but DO stash it in the resume
+  // cache so a reload (iOS lock, pull-to-refresh) re-hydrates this chart instantly
+  // instead of a blank screen while the socket reconnects.
+  writeJoined(currentProject());
 }
 
 /** Persist the currently-joined (ephemeral) session as a real local project under

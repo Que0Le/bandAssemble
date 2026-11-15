@@ -45,9 +45,35 @@ export class WsTransport implements Transport {
     private sessionId: string,
     private deviceId: string,
     private seat: Seat,
-  ) {}
+  ) {
+    // Reconnect as soon as the page comes back: iOS freezes the tab (and kills the
+    // socket) on screen-lock/backgrounding, and the pending reconnect timer is
+    // frozen with it — so on resume we don't wait, we reconnect immediately. This
+    // is what brings the live sync (and a joiner's re-adopt via session/hello) back
+    // after an unlock without needing a manual refresh.
+    const resume = () => {
+      const st = this.ws?.readyState;
+      if (st === WebSocket.OPEN || st === WebSocket.CONNECTING) return;
+      this.connect();
+    };
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) resume();
+    });
+    window.addEventListener('pageshow', resume); // bfcache restore
+    window.addEventListener('online', resume);
+  }
 
   connect(): void {
+    // Drop any previous socket's handlers first, so a resume-triggered reconnect
+    // can't leave two sockets (or two reconnect loops) racing.
+    if (this.ws) {
+      this.ws.onopen = this.ws.onclose = this.ws.onerror = this.ws.onmessage = null;
+      try {
+        this.ws.close();
+      } catch {
+        /* already closed */
+      }
+    }
     const url = relayUrl(this.sessionId);
     this.wsUrl = url;
     this.attempts++;
