@@ -98,7 +98,7 @@
     color: var(--muted, #8b93a3);
   }
   .code-line b {
-    font-family: ui-monospace, monospace;
+    font-family: var(--mono);
     letter-spacing: 0.08em;
     color: var(--fg, #e6edf3);
   }

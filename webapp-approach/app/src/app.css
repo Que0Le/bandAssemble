@@ -7,6 +7,8 @@
   --accent: #4fd1c5;
   --hot: #f6ad55;
   --play: #48bb78;
+  /* One monospace stack for the whole app (chords, tabs, links, codes). */
+  --mono: ui-monospace, 'Cascadia Code', Consolas, monospace;
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; }

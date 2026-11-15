@@ -64,7 +64,7 @@
   /* One monospace grid for the whole line, so chords, lyrics and the strum row
      line up character-for-character — true alignment, no proportional drift. */
   .text {
-    font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+    font-family: var(--mono);
     font-size: 1rem;
     line-height: 1.5;
     color: #e8edf5;
@@ -80,7 +80,7 @@
     color: #ffe29a;
   }
   .strum {
-    font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+    font-family: var(--mono);
     font-size: 1rem;
     line-height: 1.5;
     color: #9fe0b0;
@@ -125,12 +125,12 @@
     margin: 2px 8px 2px 0;
   }
   .cd-text {
-    font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+    font-family: var(--mono);
     color: #ffcf6b;
     font-size: 0.85rem;
   }
   .tab {
-    font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+    font-family: var(--mono);
     font-size: 0.86rem;
     line-height: 1.25;
     color: #cfd6e2;

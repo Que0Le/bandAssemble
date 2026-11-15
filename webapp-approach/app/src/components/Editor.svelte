@@ -540,7 +540,7 @@
     width: 100%;
     height: 320px;
     resize: vertical;
-    font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+    font-family: var(--mono);
     font-size: 0.92rem;
     line-height: 1.5;
     color: #e8edf5;

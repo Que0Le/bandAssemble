@@ -94,7 +94,7 @@
   }
   .code input {
     width: 7ch;
-    font-family: ui-monospace, monospace;
+    font-family: var(--mono);
     font-size: 1.15rem;
     letter-spacing: 0.12em;
     text-align: center;

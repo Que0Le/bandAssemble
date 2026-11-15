@@ -168,7 +168,7 @@
     font-weight: 650;
   }
   .wsdiag code {
-    font-family: ui-monospace, monospace;
+    font-family: var(--mono);
     font-size: 0.74rem;
     color: #e6edf3;
   }
@@ -208,7 +208,7 @@
   /* Build stamp — muted, pushed to the right so the connection pill sits beside it. */
   .build {
     margin-left: auto;
-    font-family: ui-monospace, monospace;
+    font-family: var(--mono);
     font-size: 0.68rem;
     color: #6b7280;
     white-space: nowrap;

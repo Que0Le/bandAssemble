@@ -39,7 +39,7 @@
   }
   .urlbox {
     width: 100%;
-    font-family: ui-monospace, monospace;
+    font-family: var(--mono);
     font-size: 0.76rem;
     line-height: 1.5;
     background: #0b0e13;
