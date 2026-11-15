@@ -213,6 +213,7 @@ export function adoptProject(
   base: Base,
   incomingRoles: Role[],
   incomingCharts: Record<string, SongObject[]>,
+  focusRole?: string,
 ): void {
   // A join is EPHEMERAL: mirror the host's live project in memory but persist
   // nothing — the device's own stored projects stay untouched, and it never
@@ -227,8 +228,14 @@ export function adoptProject(
   // Replace charts wholesale.
   for (const k of Object.keys(charts)) delete charts[k];
   for (const k of Object.keys(incomingCharts)) charts[k] = incomingCharts[k];
-  // Keep the current role if it still exists, else land on the first real one.
-  if (!roles.some((r) => r.id === view.roleId)) view.roleId = roles[0]?.id ?? '';
+  // Pick the role to view. If the player is already on a valid role (they chose
+  // it), keep it — don't yank them when the Maestro re-syncs on someone else's
+  // join. Otherwise (a fresh join) follow the Maestro's focus role so this device
+  // shows the SAME part/line as the Maestro, not a default first role.
+  if (!roles.some((r) => r.id === view.roleId)) {
+    const focus = focusRole && roles.some((r) => r.id === focusRole) ? focusRole : undefined;
+    view.roleId = focus ?? roles[0]?.id ?? '';
+  }
   // Deliberately no save()/setLastOpened — the live arrangement stays in memory.
 }
 

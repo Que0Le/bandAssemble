@@ -48,6 +48,9 @@ export interface ProjectSyncMsg {
   base: Base;
   roles: Role[];
   charts: Record<string, SongObject[]>;
+  /** The Maestro's currently-viewed role, so a fresh joiner lands on the SAME
+   *  part (and line) instead of defaulting to the first role. */
+  focusRole?: string;
 }
 
 /** Player clock/ping → Maestro, Maestro clock/pong → Player */

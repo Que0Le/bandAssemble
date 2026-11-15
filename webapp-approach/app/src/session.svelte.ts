@@ -14,7 +14,7 @@ import { ClockSync } from './lib/clockSync';
 import { MasterAudio } from './lib/audio';
 import { labels } from './lib/model';
 import type { SongObject } from './lib/model';
-import { charts, roles, setChart, meta, activeId, adoptProject } from './view.svelte';
+import { charts, roles, view, setChart, meta, activeId, adoptProject } from './view.svelte';
 import { Lobby } from './lib/lobby.svelte';
 import type {
   Seat,
@@ -132,6 +132,7 @@ export class Session {
           base: meta.base,
           roles: [...roles],
           charts: { ...charts },
+          focusRole: view.roleId, // so a joiner lands on the part the Maestro is on
         });
       });
       this.transport.on('chart/handoff', (p: ChartMsg) => {
@@ -162,7 +163,7 @@ export class Session {
         this.lastSync = this.clock.lastSync;
       });
       this.transport.on('project/sync', (p: ProjectSyncMsg) =>
-        adoptProject(p.id, p.title, p.base, p.roles, p.charts),
+        adoptProject(p.id, p.title, p.base, p.roles, p.charts, p.focusRole),
       );
       this.transport.on('chart/update', (p: ChartMsg) => setChart(p.roleId, p.objects));
     }
