@@ -19,7 +19,7 @@ import {
 } from './lib/projects';
 import { putMedia, requestPersist } from './lib/media';
 import type { MediaMeta } from './lib/media';
-import { slug, r2, download } from './lib/util';
+import { slug, r2, download, uuid } from './lib/util';
 
 const params = new URLSearchParams(location.search);
 
@@ -32,7 +32,7 @@ removePristineSample();
 function blankProject(): Project {
   return {
     schemaVersion: 4,
-    id: crypto.randomUUID(),
+    id: uuid(),
     title: 'Untitled',
     base: { lengthSec: 0, lyrics: [] },
     roles: [],
@@ -236,7 +236,7 @@ export function adoptProject(
  *  a fresh id, so the user can keep practising it offline. Leaves ephemeral mode,
  *  so further host updates then save to this copy too. Returns the new id. */
 export function saveJoinedCopy(): string {
-  const id = crypto.randomUUID();
+  const id = uuid();
   meta.id = id;
   view.ephemeral = false;
   saveProject(currentProject());

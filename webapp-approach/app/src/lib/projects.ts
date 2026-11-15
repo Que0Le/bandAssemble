@@ -7,7 +7,7 @@ import { PROJECT } from './model';
 import type { Project } from './model';
 import { deleteMedia, getMediaBlob, putMediaBlob } from './media';
 import type { MediaMeta } from './media';
-import { slug, download } from './util';
+import { slug, download, uuid } from './util';
 
 const INDEX_KEY = 'bandassemble:index';
 const LAST_KEY = 'bandassemble:last';
@@ -106,7 +106,7 @@ export function createProject(title: string): string {
   // Globally-unique id (not a title slug): two devices that both make a song
   // called "The Scientist" must NOT collide, or joining one would overwrite the
   // other's local project. The id is identity; the title is just a label.
-  const id = crypto.randomUUID();
+  const id = uuid();
   saveProject({
     schemaVersion: 4,
     id,
@@ -120,7 +120,7 @@ export function createProject(title: string): string {
 
 /** Import a project (validated by the caller) under a fresh id — never clobbers. */
 export function importProject(p: Project): string {
-  const id = crypto.randomUUID();
+  const id = uuid();
   saveProject(migrate({ ...p, id }));
   return id;
 }
@@ -128,7 +128,7 @@ export function importProject(p: Project): string {
 export function duplicateProject(id: string): string | null {
   const p = loadProject(id);
   if (!p) return null;
-  const newId = crypto.randomUUID();
+  const newId = uuid();
   saveProject({ ...p, id: newId, title: p.title + ' (copy)' });
   return newId;
 }
