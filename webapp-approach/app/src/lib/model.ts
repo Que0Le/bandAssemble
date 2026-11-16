@@ -64,12 +64,22 @@ export interface AudioRef {
   durationSec: number;
 }
 
+/** The raw text the import helper was built from — kept so a later edit can
+ *  reopen the helper with the original paste (chords land mid-word on purpose:
+ *  a chord marks when it's struck, not the syllable). */
+export interface ImportSource {
+  chords: string; // the pasted Ultimate Guitar / ChordPro text
+  lrc: string; // the pasted .lrc text
+  offset: number; // the offset slider (seconds) used to lock to the track
+}
+
 /** The Maestro-authored skeleton every Chart clones from. */
 export interface Base {
   audio?: AudioRef; // the file itself lives only on the Maestro
   lengthSec: number; // master audio length; positions are seconds into it
   bpm?: number; // optional, for the metronome only
   lyrics: SongObject[]; // timed lyric lines (+ labels): the clonable skeleton
+  import?: ImportSource; // the original chords+LRC paste, if built via the helper
 }
 
 export interface Project {

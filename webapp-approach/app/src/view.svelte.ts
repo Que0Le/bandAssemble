@@ -5,7 +5,7 @@
 // registry (lib/projects). Big media lives in IndexedDB (lib/media), not here.
 
 import { cloneObjects } from './lib/model';
-import type { Role, SongObject, Base, Chart, Project } from './lib/model';
+import type { Role, SongObject, Base, Chart, Project, ImportSource } from './lib/model';
 import {
   removePristineSample,
   listProjects,
@@ -235,6 +235,13 @@ export function cloneInto(targetRoleId: string, sourceKey: string): void {
  *  from this; it is NOT a Role, so it never appears in the Role list. */
 export function setBase(objects: SongObject[]): void {
   meta.base.lyrics = objects;
+  save();
+}
+
+/** Remember the original chords+LRC paste on the project, so reopening the
+ *  import helper later shows exactly what it was built from. */
+export function setImportSource(src: ImportSource): void {
+  meta.base.import = src;
   save();
 }
 

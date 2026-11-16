@@ -11,6 +11,7 @@
     openProjectFile,
     setChart,
     setBase,
+    setImportSource,
     storeProjectMedia,
     activeId,
   } from '../view.svelte';
@@ -20,6 +21,7 @@
   import { copyText } from '../lib/clipboard';
   import { r2, secToClock, clockToSec } from '../lib/util';
   import ObjectView from './ObjectView.svelte';
+  import TimingChordHelper from './TimingChordHelper.svelte';
 
   // The edit target is either the Base (lyric/timing skeleton) or a Role's chart.
   // Open on ?role= (from the chart's "Full editor…" or the wizard); a project with
@@ -164,6 +166,36 @@
       note('paste the JSON into the box and Parse (' + (e as Error).message + ')');
     }
   }
+  // The helper hands us a generated chart JSON; load it through the normal JSON
+  // path (parse() detects JSON → keeps all timestamps, normalizes the box to
+  // markup). We don't auto-wire its output into the Sheet — only this button does.
+  function useFromHelper(chartJson: string, source: { chords: string; lrc: string; offset: number }) {
+    let rid = 'guitar';
+    let songTitle = '';
+    try {
+      const d = JSON.parse(chartJson) as { roleId?: string; title?: string };
+      rid = d.roleId || 'guitar';
+      songTitle = d.title || '';
+    } catch {
+      /* keep defaults */
+    }
+    sheet = chartJson;
+    parse(); // loads objects (timestamps kept)
+    // Commit to a real Role. A fresh project edits the Base, which isn't a
+    // performable chart — without this, maestro/player open with no role/chart.
+    if (!roles.some((r) => r.id === rid)) roles.push({ id: rid, kind: 'guitar', label: 'Guitar' });
+    roleId = rid; // edit the imported role, not the Base
+    const end = objects.reduce((m, o) => Math.max(m, o.endSec || 0), 0);
+    if (end > meta.base.lengthSec) meta.base.lengthSec = end; // span the transport
+    if (songTitle && (!meta.title || meta.title === 'Untitled')) {
+      meta.title = songTitle;
+      title = songTitle;
+    }
+    setChart(rid, objects); // create the Role (if new) + store the chart + persist
+    setImportSource(source); // remember the original paste
+    note(`imported to “${rid}” · saved to project`);
+  }
+
   function loadRole() {
     sheet = sheetFor(roleId);
     objects = reTime(parseSheet(sheet), storedObjs(roleId));
@@ -349,6 +381,10 @@
     >
     {#if copied}<span class="flash">{copied}</span>{/if}
   </div>
+
+  <!-- Import helper: paste chords + an LRC → a timed chart, then "Use as sheet".
+       Sits above the Sheet + Timing panels; collapsed by default. -->
+  <TimingChordHelper onUse={useFromHelper} initial={meta.base.import} />
 
   <div class="ed-grid">
     <!-- left: paste + parse -->
