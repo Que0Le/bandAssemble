@@ -23,6 +23,16 @@
   // a re-render (e.g. moving the offset slider) can't snap the panel shut.
   let open = $state(!!untrack(() => initial?.chords));
   let exKind = $state<'cho' | 'lrc' | 'json'>('json');
+  // Persist the sync toggle per-device (like the chart-mode preference).
+  const SYNC_KEY = 'bandassemble:syncWithSheet';
+  const readSync = () => {
+    try {
+      return localStorage.getItem(SYNC_KEY) === '1';
+    } catch {
+      return false;
+    }
+  };
+  let syncWithSheet = $state(readSync()); // on = live-push to the Sheet, manual button disabled
   let flash = $state('');
 
   const mmss = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
@@ -90,6 +100,28 @@
     onUse(chartJson, { chords: chordsText, lrc: lrcText, offset });
     note('sent to Sheet');
   }
+
+  // "sync with sheet" on → push the current chart to the Sheet live (re-runs
+  // whenever the alignment changes), which is why the manual button is disabled.
+  // Read the inputs in tracked scope so this re-runs on real changes, but call
+  // onUse inside untrack: it reads AND writes the Editor's roles/charts/meta, and
+  // without this those become deps and its own writes re-trigger the effect — a
+  // churn loop doing a full project save() each pass (the toggle lag).
+  $effect(() => {
+    if (!syncWithSheet || !objs.length) return;
+    const json = chartJson;
+    const src = { chords: chordsText, lrc: lrcText, offset };
+    untrack(() => onUse(json, src));
+  });
+
+  // Remember the toggle across reloads.
+  $effect(() => {
+    try {
+      localStorage.setItem(SYNC_KEY, syncWithSheet ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+  });
 </script>
 
 <details class="helper" bind:open>
@@ -116,9 +148,7 @@
       </div>
     </div>
 
-    <div class="ctl">
-      <label class="off">Offset <input type="range" min="-5" max="5" step="0.1" bind:value={offset} /></label>
-      <span class="offv">{offset.toFixed(1)}s</span>
+    <div class="status">
       {#if aligned}
         <span class="cov">coverage <b>{Math.round(aligned.coverage * 100)}%</b></span>
         <span class="lbls">{aligned.labels.map((l) => `${l.label} @${mmss(l.time)}`).join('  ')}</span>
@@ -157,11 +187,25 @@
         <div class="exbtns">
           <button class="btn" onclick={copy}>⧉ Copy</button>
           <button class="btn" onclick={download}>⤓ Download</button>
-          <button class="btn use" onclick={useAsSheet} title="Load this timed chart into the Sheet box (keeps all timestamps)"
-            >➜ Use as sheet</button
+          <button
+            class="btn use"
+            onclick={useAsSheet}
+            disabled={syncWithSheet}
+            title="Load this timed chart into the Sheet box (keeps all timestamps)">➜ Use as sheet</button
           >
+          <label class="synclbl" title="Keep the Sheet in sync with this chart automatically">
+            <input type="checkbox" bind:checked={syncWithSheet} /> sync to sheet
+          </label>
           {#if flash}<span class="flash">{flash}</span>{/if}
         </div>
+      </div>
+
+      <!-- Offset lives at the bottom so it's next to the video in the Timing
+           panel below — nudge while watching to lock the chart to the recording. -->
+      <div class="ctl">
+        <label class="off">Offset <input type="range" min="-5" max="5" step="0.1" bind:value={offset} /></label>
+        <span class="offv">{offset.toFixed(1)}s</span>
+        <span class="hint">nudge to lock the chart to the video below</span>
       </div>
     {/if}
   </div>
@@ -218,14 +262,22 @@
     border-radius: 8px;
     padding: 8px 10px;
   }
+  .status,
   .ctl {
     display: flex;
     align-items: center;
     gap: 14px;
-    margin: 12px 0 6px;
     flex-wrap: wrap;
     font-size: 0.85rem;
     color: #8b93a3;
+  }
+  .status {
+    margin: 10px 0 6px;
+  }
+  .ctl {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid #1c232e;
   }
   .off {
     display: inline-flex;
@@ -348,6 +400,19 @@
     border-color: #2f6b45;
     color: #bdf0cf;
     font-weight: 600;
+  }
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+  .synclbl {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.8rem;
+    color: var(--muted, #8b93a3);
+    cursor: pointer;
+    user-select: none;
   }
   .flash {
     color: #9fe0b0;
