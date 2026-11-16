@@ -1,0 +1,19 @@
+{
+  "name": "bandassemble-import-prototype",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Throwaway prototype: parse an Ultimate Guitar / ChordPro paste into a structured {line, lyrics, chords[]} model with ChordSheetJS. Isolated from the app code.",
+  "scripts": {
+    "demo": "node demo.js",
+    "demo:align": "node demo-align.js",
+    "demo:emit": "node demo-emit.js",
+    "gui": "vite --port 5180 --strictPort"
+  },
+  "dependencies": {
+    "chordsheetjs": "^12.3.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.10"
+  }
+}
