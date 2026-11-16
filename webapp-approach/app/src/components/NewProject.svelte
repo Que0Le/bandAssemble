@@ -1,12 +1,11 @@
 <script lang="ts">
-  // New-project wizard: Name -> Media -> Lyrics. Creates the project locally, stores
-  // the audio/video blob in IndexedDB, parses the pasted lyrics into the Base skeleton
-  // (sequential placeholder times), then hands off to the Editor to sync (tap-to-time).
+  // New-project wizard: Name -> Media. Creates the project locally and stores the
+  // audio/video blob in IndexedDB, then hands off to the Editor. Lyrics + chords +
+  // timing are added there with the Timing and chord helper (paste chords + an LRC).
   // Media is optional here — it can be attached later — and only the Maestro needs it.
   import { onDestroy } from 'svelte';
   import { createProject, loadProject, saveProject, setLastOpened } from '../lib/projects';
   import { putMedia, requestPersist } from '../lib/media';
-  import { parseSheet, autoTime } from '../lib/parseSheet';
   import { mmss, r2 } from '../lib/util';
 
   let step = $state(1);
@@ -36,9 +35,6 @@
     durationSec = 0;
   }
 
-  // step 3
-  let lyrics = $state('');
-
   let busy = $state(false);
   let err = $state('');
 
@@ -51,11 +47,9 @@
     try {
       const id = createProject(title);
       const p = loadProject(id)!;
-      const objs = autoTime(parseSheet(lyrics));
-      p.base.lyrics = objs;
-      // length: real media duration if known, else the end of the last parsed line
-      const lastEnd = objs.length ? objs[objs.length - 1].endSec : 0;
-      p.base.lengthSec = r2(durationSec || lastEnd);
+      // Lyrics/chords/timing are added later in the Editor; length comes from the
+      // media if one was attached.
+      p.base.lengthSec = r2(durationSec);
       if (mediaFile) p.base.audio = { fileName: mediaFile.name, durationSec: p.base.lengthSec };
       saveProject(p);
       if (mediaFile) {
@@ -81,8 +75,7 @@
     <a class="back" href={home()}>← Cancel</a>
     <ol class="steps">
       <li class:on={step === 1} class:done={step > 1}>Name</li>
-      <li class:on={step === 2} class:done={step > 2}>Media</li>
-      <li class:on={step === 3}>Lyrics</li>
+      <li class:on={step === 2}>Media</li>
     </ol>
   </div>
 
@@ -104,7 +97,7 @@
       <h2>Add the audio or video</h2>
       <p class="hint">
         The Maestro plays this; players follow the clock. A video is handy while you
-        sync the lyrics. It's stored on this device only — you can add or replace it later.
+        sync the chart. It's stored on this device only — you can add or replace it later.
       </p>
       {#if !mediaFile}
         <label class="drop">
@@ -136,20 +129,6 @@
         </div>
       {/if}
     </div>
-  {:else}
-    <div class="panel">
-      <h2>Paste the lyrics</h2>
-      <p class="hint">
-        One line per lyric line. Mark sections like <code>[Verse]</code> or
-        <code>[Chorus]</code>. You'll time them to the music in the next step.
-      </p>
-      <textarea
-        class="sheet"
-        bind:value={lyrics}
-        spellcheck="false"
-        placeholder={'[Verse 1]\nFirst line of the verse\nSecond line\n\n[Chorus]\nThe hook goes here'}
-      ></textarea>
-    </div>
   {/if}
 
   {#if err}<p class="err">{err}</p>{/if}
@@ -159,7 +138,7 @@
       <button class="btn ghost" onclick={() => (step -= 1)} disabled={busy}>← Back</button>
     {/if}
     <span class="grow"></span>
-    {#if step < 3}
+    {#if step < 2}
       <button class="btn primary" onclick={() => (step += 1)} disabled={step === 1 && !title.trim()}>
         Next →
       </button>
@@ -227,12 +206,6 @@
     margin: 0 0 14px;
     line-height: 1.5;
   }
-  .hint code {
-    background: #0b0e13;
-    border: 1px solid #222a33;
-    border-radius: 5px;
-    padding: 1px 5px;
-  }
   .in {
     width: 100%;
     background: #0f1218;
@@ -286,19 +259,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-  .sheet {
-    width: 100%;
-    height: 240px;
-    resize: vertical;
-    font-family: var(--mono);
-    font-size: 0.95rem;
-    line-height: 1.5;
-    color: #e8edf5;
-    background: #0f1218;
-    border: 1px solid #2a3340;
-    border-radius: 10px;
-    padding: 10px 12px;
   }
   .err {
     color: #ffb4b0;
