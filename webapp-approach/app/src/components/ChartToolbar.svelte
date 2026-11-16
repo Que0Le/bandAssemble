@@ -23,6 +23,11 @@
     confirmDel = false;
   }
 
+  // Transpose (semitones). A Maestro's change is broadcast to all; a Player's
+  // stays on their own device. Non-destructive — the written chords don't change.
+  const transpose = $derived(meta.base.transpose ?? 0);
+  const fmtT = (n: number) => (n > 0 ? `+${n}` : `${n}`);
+
   let copied = $state(false);
   let copyTimer: ReturnType<typeof setTimeout> | undefined;
   async function copySheet() {
@@ -66,6 +71,12 @@
   {/if}
   <span class="spacer"></span>
   {#if !view.editing}
+    <div class="transpose" title="Transpose the chords (semitones). Non-destructive — the written chart doesn't change.">
+      <span class="tlbl">Transpose</span>
+      <button class="btn step" onclick={() => session?.setTranspose(transpose - 1)} disabled={transpose <= -11}>−</button>
+      <button class="btn tval" onclick={() => session?.setTranspose(0)} title="Reset to the written key">{fmtT(transpose)}</button>
+      <button class="btn step" onclick={() => session?.setTranspose(transpose + 1)} disabled={transpose >= 11}>+</button>
+    </div>
     <button
       class="btn"
       class:on={view.autoScroll}
@@ -142,6 +153,26 @@
     color: #bdf0cf;
     border-color: #2f6b45;
     background: #16271f;
+  }
+  .transpose {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .transpose .tlbl {
+    color: #8b93a3;
+    font-size: 0.78rem;
+    margin-right: 2px;
+  }
+  .btn.step {
+    padding: 4px 9px;
+    font-weight: 700;
+  }
+  .btn.tval {
+    min-width: 34px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    color: #ffcf6b;
   }
   .btn.del {
     padding: 5px 9px;

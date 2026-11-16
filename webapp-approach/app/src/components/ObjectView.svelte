@@ -4,18 +4,23 @@
   // and the Editor preview. Chord hover is reported via callbacks so the parent
   // owns any tooltip.
   import type { SongObject } from '../lib/model';
-  import { parseInline } from '../lib/chords';
+  import { parseInline, transposeChordName } from '../lib/chords';
   import { chordSvg } from '../lib/chordDiagram';
 
   let {
     obj,
+    transpose = 0,
     onChordEnter,
     onChordLeave,
   }: {
     obj: SongObject;
+    transpose?: number; // semitones; applied to displayed chord names (non-destructive)
     onChordEnter?: (e: MouseEvent, chord: string) => void;
     onChordLeave?: () => void;
   } = $props();
+
+  // The chord as shown (transposed). Hover/diagram use this same value.
+  const disp = (c: string) => (transpose ? transposeChordName(c, transpose) : c);
 </script>
 
 {#if obj.type === 'label'}
@@ -40,9 +45,9 @@
       {#each parseInline(obj.text) as seg}{#if seg.chord}<span
             class="chord"
             role="img"
-            aria-label={`chord ${seg.chord}`}
-            onmouseenter={(e) => onChordEnter?.(e, seg.chord!)}
-            onmouseleave={() => onChordLeave?.()}>[{seg.chord}]</span
+            aria-label={`chord ${disp(seg.chord)}`}
+            onmouseenter={(e) => onChordEnter?.(e, disp(seg.chord!))}
+            onmouseleave={() => onChordLeave?.()}>[{disp(seg.chord)}]</span
           >{/if}<span class="word">{seg.text}</span>{/each}
     </div>
   {/if}

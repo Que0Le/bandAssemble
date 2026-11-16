@@ -32,6 +32,50 @@ function normalize(name: string): string {
   return name.trim().replace(/maj/i, '').replace(/\s+/g, '');
 }
 
+// Movable barre shapes, so a transposed chord still gets a diagram even when it
+// isn't an open-position favourite in SHAPES. Offsets are added to the barre
+// fret F; -99 = muted string. E-shape has its root on the low-E (6th) string,
+// A-shape on the A (5th) string.
+const CHROMA: Record<string, number> = {
+  C: 0, 'C#': 1, Db: 1, D: 2, 'D#': 3, Eb: 3, E: 4, F: 5, 'F#': 6,
+  Gb: 6, G: 7, 'G#': 8, Ab: 8, A: 9, 'A#': 10, Bb: 10, B: 11,
+};
+type Quality = 'maj' | 'm' | '7' | 'm7' | 'maj7';
+const E_SHAPE: Record<Quality, number[]> = {
+  maj: [0, 2, 2, 1, 0, 0], m: [0, 2, 2, 0, 0, 0], '7': [0, 2, 0, 1, 0, 0],
+  m7: [0, 2, 0, 0, 0, 0], maj7: [0, 2, 1, 1, 0, 0],
+};
+const A_SHAPE: Record<Quality, number[]> = {
+  maj: [-99, 0, 2, 2, 2, 0], m: [-99, 0, 2, 2, 1, 0], '7': [-99, 0, 2, 0, 2, 0],
+  m7: [-99, 0, 2, 0, 1, 0], maj7: [-99, 0, 2, 1, 2, 0],
+};
+
+function quality(rest: string): Quality {
+  if (/maj7|M7|Δ/.test(rest)) return 'maj7';
+  const minor = /^m(?!aj)/.test(rest) || /^min/.test(rest) || rest.startsWith('-');
+  const has7 = /7/.test(rest);
+  if (minor && has7) return 'm7';
+  if (minor) return 'm';
+  if (has7) return '7';
+  return 'maj';
+}
+
+/** Build a movable barre voicing for any root + common quality. Prefers the
+ *  lower of the E-shape / A-shape barres (open positions live in SHAPES). */
+function generateShape(name: string): number[] | null {
+  const m = name.match(/^([A-G][#b]?)(.*)$/);
+  if (!m) return null;
+  const r = CHROMA[m[1]];
+  if (r === undefined) return null;
+  const q = quality(m[2]);
+  const eF = (((r - 4) % 12) + 12) % 12; // E-shape barre fret
+  const aF = (((r - 9) % 12) + 12) % 12; // A-shape barre fret
+  const useE = eF >= 1 && (eF <= aF || aF < 1);
+  const F = useE ? eF : aF >= 1 ? aF : eF;
+  if (F < 1) return null; // open position — leave it to SHAPES
+  return (useE ? E_SHAPE : A_SHAPE)[q].map((o) => (o <= -99 ? -1 : o + F));
+}
+
 const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -42,7 +86,7 @@ function fretsFor(name: string, defs?: Record<string, string>): number[] | null 
     const g = gripToFrets(custom);
     if (g) return g;
   }
-  return SHAPES[name] ?? SHAPES[normalize(name)] ?? null;
+  return SHAPES[name] ?? SHAPES[normalize(name)] ?? generateShape(name) ?? null;
 }
 
 /** Return an inline SVG string for the chord, or null if we have no shape. */

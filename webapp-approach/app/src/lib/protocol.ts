@@ -53,6 +53,11 @@ export interface ProjectSyncMsg {
   focusRole?: string;
 }
 
+/** Maestro → all: the song's display transpose (semitones) changed. */
+export interface TransposeMsg {
+  semitones: number;
+}
+
 /** Player clock/ping → Maestro, Maestro clock/pong → Player */
 export interface PingMsg {
   t1: number;

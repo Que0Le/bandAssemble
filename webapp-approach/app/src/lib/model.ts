@@ -80,6 +80,7 @@ export interface Base {
   bpm?: number; // optional, for the metronome only
   lyrics: SongObject[]; // timed lyric lines (+ labels): the clonable skeleton
   import?: ImportSource; // the original chords+LRC paste, if built via the helper
+  transpose?: number; // display transpose in semitones (ChordPro {transpose}); 0/undef = none
 }
 
 export interface Project {

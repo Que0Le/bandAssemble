@@ -1,7 +1,7 @@
 <script lang="ts">
   import { session } from '../session.svelte';
   import { objectIndexAt } from '../lib/model';
-  import { view, currentObjects, roles, cloneInto, cloneSources } from '../view.svelte';
+  import { view, currentObjects, roles, cloneInto, cloneSources, meta } from '../view.svelte';
   import { chordSvg } from '../lib/chordDiagram';
   import { chordDefs } from '../lib/chords';
   import ObjectView from './ObjectView.svelte';
@@ -10,6 +10,7 @@
   const s = session!;
   const objects = $derived(currentObjects());
   const defs = $derived(chordDefs(objects)); // custom fingerings for this chart
+  const transpose = $derived(meta.base.transpose ?? 0); // display transpose (semitones)
   const roleLabel = $derived(roles.find((r) => r.id === view.roleId)?.label ?? view.roleId);
 
   // ---- Two-page horizontal viewer -------------------------------------------
@@ -182,7 +183,7 @@
           bind:this={els[i]}
           ondblclick={(e) => jumpTo(e, obj)}
         >
-          <ObjectView {obj} onChordEnter={showTip} onChordLeave={hideTip} />
+          <ObjectView {obj} {transpose} onChordEnter={showTip} onChordLeave={hideTip} />
         </div>
       {/each}
     </div>
@@ -209,7 +210,7 @@
               bind:this={els[i]}
               ondblclick={(e) => jumpTo(e, obj)}
             >
-              <ObjectView {obj} onChordEnter={showTip} onChordLeave={hideTip} />
+              <ObjectView {obj} {transpose} onChordEnter={showTip} onChordLeave={hideTip} />
             </div>
           {/each}
         </div>

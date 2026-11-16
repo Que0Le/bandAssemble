@@ -20,6 +20,7 @@ import {
   view,
   setChart,
   removeRole as applyRemoveRole,
+  setTranspose as applySetTranspose,
   meta,
   activeId,
   adoptProject,
@@ -33,6 +34,7 @@ import type {
   LoopRange,
   ChartMsg,
   ProjectSyncMsg,
+  TransposeMsg,
 } from './lib/protocol';
 
 const params = new URLSearchParams(location.search);
@@ -176,7 +178,15 @@ export class Session {
       );
       this.transport.on('chart/update', (p: ChartMsg) => setChart(p.roleId, p.objects));
       this.transport.on('role/remove', (p: { roleId: string }) => applyRemoveRole(p.roleId));
+      this.transport.on('base/transpose', (p: TransposeMsg) => applySetTranspose(p.semitones));
     }
+  }
+
+  /** Set the song's display transpose. Applies locally; a Maestro also broadcasts
+   *  it so everyone follows (a Player's change stays on their own device). */
+  setTranspose(semitones: number) {
+    applySetTranspose(semitones);
+    if (this.seat === 'maestro') this.transport.send('base/transpose', { semitones: meta.base.transpose ?? 0 });
   }
 
   // Apply an edited chart locally, then share it: the Maestro distributes it to

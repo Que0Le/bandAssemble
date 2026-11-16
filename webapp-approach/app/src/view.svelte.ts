@@ -245,6 +245,13 @@ export function setImportSource(src: ImportSource): void {
   save();
 }
 
+/** Set the song's display transpose (semitones). Clamped to ±11; non-destructive
+ *  — the canonical [X] text is untouched, this is applied at render. */
+export function setTranspose(semitones: number): void {
+  meta.base.transpose = Math.max(-11, Math.min(11, Math.round(semitones))) || 0;
+  save();
+}
+
 /** Record the Base's media reference (filename + duration). The bytes live in
  *  IndexedDB; this just notes what's attached and sets the song length. */
 export function setBaseAudio(fileName: string, durationSec: number): void {

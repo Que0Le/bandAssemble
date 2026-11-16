@@ -97,3 +97,44 @@ export function chordDefs(objects: SongObject[]): Record<string, string> {
   for (const o of objects) if (o.type === 'chorddef') m[o.name] = o.grip;
   return m;
 }
+
+// ---- transpose ------------------------------------------------------------
+// Non-destructive: the inline [X] text stays canonical; a transpose is applied
+// at render (and on export). Spelling defaults to sharps — good enough; a
+// key-aware speller can come later.
+
+const SHARPS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const NOTE_IDX: Record<string, number> = {
+  C: 0, 'C#': 1, Db: 1, D: 2, 'D#': 3, Eb: 3, E: 4, Fb: 4, F: 5, 'E#': 5,
+  'F#': 6, Gb: 6, G: 7, 'G#': 8, Ab: 8, A: 9, 'A#': 10, Bb: 10, B: 11, Cb: 11,
+};
+
+function shiftNote(note: string, semis: number): string | null {
+  const i = NOTE_IDX[note];
+  if (i === undefined) return null;
+  return SHARPS[(((i + semis) % 12) + 12) % 12];
+}
+
+/** Transpose a chord NAME by `semis` semitones, keeping its quality suffix and
+ *  shifting a slash-bass note too. Returns the input unchanged if it has no
+ *  recognizable root (so non-chord tokens pass through). */
+export function transposeChordName(name: string, semis: number): string {
+  if (!semis) return name;
+  const m = name.match(/^([A-G][#b]?)(.*)$/);
+  if (!m) return name;
+  const root = shiftNote(m[1], semis);
+  if (!root) return name;
+  let rest = m[2];
+  const slash = rest.match(/^(.*)\/([A-G][#b]?)(.*)$/);
+  if (slash) {
+    const bass = shiftNote(slash[2], semis);
+    if (bass) rest = `${slash[1]}/${bass}${slash[3]}`;
+  }
+  return root + rest;
+}
+
+/** Transpose every inline [X] token in a line of text. */
+export function transposeText(text: string, semis: number): string {
+  if (!semis) return text;
+  return text.replace(/\[([^\]]*)\]/g, (_, c) => `[${transposeChordName(String(c).trim(), semis)}]`);
+}
