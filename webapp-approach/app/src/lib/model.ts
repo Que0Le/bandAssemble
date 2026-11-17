@@ -71,7 +71,6 @@ export interface AudioRef {
 export interface ImportSource {
   chords: string; // the pasted Ultimate Guitar / ChordPro text
   lrc: string; // the pasted .lrc text
-  offset: number; // the offset slider (seconds) used to lock to the track
 }
 
 /** The Maestro-authored skeleton every Chart clones from. */
@@ -95,12 +94,20 @@ export interface Project {
 
 // ---- helpers -------------------------------------------------------------
 
+/** A comment block: a flow line carrying only a note (no lyric / chords / strum).
+ *  It's an annotation, not timed content, so it's excluded from playback
+ *  highlighting and tap navigation — but it keeps its start/end, so a line can be
+ *  commented out temporarily without losing its timing. */
+export function isComment(o: SongObject): boolean {
+  return o.type === 'line' && !!o.note && !o.text && !o.strum && !o.kind;
+}
+
 /** Index of the flow object whose time range contains `head` (objects ordered by
- *  start). Chord-def objects aren't part of the flow, so they're never returned. */
+ *  start). Chord-defs and comments aren't part of the flow, so never returned. */
 export function objectIndexAt(objects: SongObject[], head: number): number {
   let idx = -1;
   for (let i = 0; i < objects.length; i++) {
-    if (objects[i].type === 'chorddef') continue; // not timed; skip for highlighting
+    if (objects[i].type === 'chorddef' || isComment(objects[i])) continue; // not timed
     if (objects[i].startSec <= head) idx = i;
     else break;
   }

@@ -2,7 +2,7 @@
   // Collapsible "Timing and chord helper": paste chords (Ultimate Guitar /
   // ChordPro) + an LRC, auto-align them into a timed chart, preview it, and push
   // it into the Editor's Sheet with "Use as sheet" (which keeps every timestamp).
-  import { buildImport, toChordPro, toLrc } from '../lib/import';
+  import { buildImport, toChordPro } from '../lib/import';
   import { untrack } from 'svelte';
   import { copyText } from '../lib/clipboard';
 
@@ -11,20 +11,15 @@
   interface Source {
     chords: string;
     lrc: string;
-    offset: number;
   }
   let { onUse, initial }: { onUse: (chartJson: string, source: Source) => void; initial?: Source } = $props();
 
   // Seed once from the saved paste (a one-time prefill, not a live binding).
   let chordsText = $state(untrack(() => initial?.chords ?? ''));
   let lrcText = $state(untrack(() => initial?.lrc ?? ''));
-  let offset = $state<number | null>(untrack(() => initial?.offset ?? 0)); // null while the field is cleared
-  const offNum = $derived(typeof offset === 'number' && isFinite(offset) ? offset : 0);
-  const bumpOffset = (d: number) => (offset = Math.round((offNum + d) * 10) / 10);
   // Open state is local (bind:open), seeded once — NOT a controlled attribute, so
   // a re-render (e.g. moving the offset slider) can't snap the panel shut.
   let open = $state(!!untrack(() => initial?.chords));
-  let exKind = $state<'cho' | 'lrc' | 'json'>('json');
   // Persist the sync toggle per-device (like the chart-mode preference).
   const SYNC_KEY = 'bandassemble:syncWithSheet';
   const readSync = () => {
@@ -39,15 +34,11 @@
 
   const mmss = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
 
-  const result = $derived(buildImport(chordsText, lrcText, offNum));
+  const result = $derived(buildImport(chordsText, lrcText, 0));
   const aligned = $derived(result.aligned);
   const objs = $derived(result.objects);
   const metaOut = $derived(result.meta);
   const chartJson = $derived(result.chart ? JSON.stringify(result.chart, null, 2) : '');
-
-  const exText = $derived(
-    !aligned ? '' : exKind === 'cho' ? toChordPro(objs, metaOut) : exKind === 'lrc' ? toLrc(objs, metaOut) : chartJson,
-  );
 
   // Timeline rows (labels + lines in time order) with chord-over-word segments.
   interface Seg {
@@ -86,20 +77,17 @@
     flash = m;
     setTimeout(() => (flash = ''), 1600);
   }
-  async function copy() {
-    note((await copyText(exText)) ? 'copied' : 'copy failed');
+  async function copyChordPro() {
+    if (!aligned) return;
+    note((await copyText(toChordPro(objs, metaOut))) ? 'ChordPro copied' : 'copy failed');
   }
-  function download() {
-    const ext = exKind === 'json' ? 'json' : exKind;
-    const name = `${(aligned?.title || 'song').replace(/\s+/g, '-').toLowerCase()}.${ext}`;
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([exText], { type: 'text/plain' }));
-    a.download = name;
-    a.click();
+  async function copyJson() {
+    if (!chartJson) return;
+    note((await copyText(chartJson)) ? 'Chart JSON copied' : 'copy failed');
   }
   function useAsSheet() {
     if (!objs.length) return note('paste chords + an LRC first');
-    onUse(chartJson, { chords: chordsText, lrc: lrcText, offset: offNum });
+    onUse(chartJson, { chords: chordsText, lrc: lrcText });
     note('sent to Sheet');
   }
 
@@ -112,7 +100,7 @@
   $effect(() => {
     if (!syncWithSheet || !objs.length) return;
     const json = chartJson;
-    const src = { chords: chordsText, lrc: lrcText, offset: offNum };
+    const src = { chords: chordsText, lrc: lrcText };
     untrack(() => onUse(json, src));
   });
 
@@ -148,69 +136,54 @@
           placeholder={'[ti:Song]\n[00:12.00]There is a house\n[00:18.50]They call the Rising Sun'}
         ></textarea>
       </div>
-    </div>
-
-    <div class="status">
-      {#if aligned}
-        <span class="cov">coverage <b>{Math.round(aligned.coverage * 100)}%</b></span>
-        <span class="lbls">{aligned.labels.map((l) => `${l.label} @${mmss(l.time)}`).join('  ')}</span>
-      {:else}
-        <span class="hint">paste both boxes to align</span>
-      {/if}
+      <div class="col">
+        <!-- svelte-ignore a11y_label_has_associated_control -->
+        <label>Combined — chords aligned to the lyric timing</label>
+        {#if aligned}
+          <div class="timeline">
+            {#each rows as r}
+              {#if r.kind === 'label'}
+                <div class="lbl">{r.text}</div>
+              {:else}
+                <div class="lrow" class:unmatched={!r.matched}>
+                  <span class="t">{mmss(r.time)}</span>
+                  {#if r.matched}
+                    <span class="body-cells">
+                      {#each r.segs as s}<span class="seg"><span class="ch">{s.ch}</span><span class="tx">{s.tx}</span></span>{/each}
+                    </span>
+                  {:else}
+                    <span class="um">{r.lyrics || '(instrumental)'}</span>
+                  {/if}
+                </div>
+              {/if}
+            {/each}
+          </div>
+        {:else}
+          <p class="hint">paste both boxes to align</p>
+        {/if}
+      </div>
     </div>
 
     {#if aligned}
-      <div class="timeline">
-        {#each rows as r}
-          {#if r.kind === 'label'}
-            <div class="lbl">{r.text}</div>
-          {:else}
-            <div class="lrow" class:unmatched={!r.matched}>
-              <span class="t">{mmss(r.time)}</span>
-              {#if r.matched}
-                <span class="body-cells">
-                  {#each r.segs as s}<span class="seg"><span class="ch">{s.ch}</span><span class="tx">{s.tx}</span></span>{/each}
-                </span>
-              {:else}
-                <span class="um">{r.lyrics || '(instrumental)'}</span>
-              {/if}
-            </div>
-          {/if}
-        {/each}
+      <div class="status">
+        <span class="cov">coverage <b>{Math.round(aligned.coverage * 100)}%</b></span>
+        <span class="lbls">{aligned.labels.map((l) => `${l.label} @${mmss(l.time)}`).join('  ')}</span>
       </div>
 
-      <div class="exports">
-        <div class="tabs">
-          <button class="tab" class:on={exKind === 'cho'} onclick={() => (exKind = 'cho')}>ChordPro</button>
-          <button class="tab" class:on={exKind === 'lrc'} onclick={() => (exKind = 'lrc')}>LRC</button>
-          <button class="tab" class:on={exKind === 'json'} onclick={() => (exKind = 'json')}>Chart JSON</button>
-        </div>
-        <pre class="exout">{exText}</pre>
-        <div class="exbtns">
-          <button class="btn" onclick={copy}>⧉ Copy</button>
-          <button class="btn" onclick={download}>⤓ Download</button>
-          <button
-            class="btn use"
-            onclick={useAsSheet}
-            disabled={syncWithSheet}
-            title="Load this timed chart into the Sheet box (keeps all timestamps)">➜ Use as sheet</button
-          >
-          <label class="synclbl" title="Keep the Sheet in sync with this chart automatically">
-            <input type="checkbox" bind:checked={syncWithSheet} /> sync to sheet
-          </label>
-          {#if flash}<span class="flash">{flash}</span>{/if}
-        </div>
-      </div>
-
-      <!-- Offset lives at the bottom so it's next to the video in the Timing
-           panel below — nudge while watching to lock the chart to the recording. -->
+      <!-- Output actions. -->
       <div class="ctl">
-        <span class="off">Offset</span>
-        <button class="btn step" onclick={() => bumpOffset(-0.1)} title="−0.1 s" aria-label="decrease offset">&lt;</button>
-        <input class="offnum" type="number" step="0.1" bind:value={offset} aria-label="offset in seconds" />
-        <button class="btn step" onclick={() => bumpOffset(0.1)} title="+0.1 s" aria-label="increase offset">&gt;</button>
-        <span class="offunit">s</span>
-        <span class="hint">nudge to lock the chart to the video below (type any value)</span>
+        <button class="btn" onclick={copyChordPro}>⧉ Copy as ChordPro</button>
+        <button class="btn" onclick={copyJson}>⧉ Copy as Chart JSON</button>
+        <button
+          class="btn use"
+          onclick={useAsSheet}
+          disabled={syncWithSheet}
+          title="Load this timed chart into the Sheet box (keeps all timestamps)">➜ Use as sheet</button
+        >
+        <label class="synclbl" title="Keep the Sheet in sync with this chart automatically">
+          <input type="checkbox" bind:checked={syncWithSheet} /> sync to sheet
+        </label>
+        {#if flash}<span class="flash">{flash}</span>{/if}
       </div>
     {/if}
   </div>
@@ -238,10 +211,26 @@
   .body {
     padding: 0 14px 14px;
   }
+  /* Chords | LRC | Combined (the aligned timeline), one row. */
+  /* The whole inputs row is the resizable unit, not each textarea; drag its
+     bottom edge and Chords | LRC | Combined grow together. */
   .ins {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 12px;
+    align-items: stretch;
+    overflow: hidden;
+  }
+  .col {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  @media (min-width: 821px) {
+    .ins {
+      height: 230px;
+      resize: vertical;
+    }
   }
   @media (max-width: 820px) {
     .ins {
@@ -256,8 +245,9 @@
   }
   textarea {
     width: 100%;
-    height: 150px;
-    resize: vertical;
+    flex: 1 1 auto;
+    min-height: 120px;
+    resize: none;
     font-family: var(--mono);
     font-size: 0.82rem;
     line-height: 1.45;
@@ -284,29 +274,6 @@
     padding-top: 12px;
     border-top: 1px solid #1c232e;
   }
-  .off {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .offnum {
-    width: 64px;
-    background: #0f1218;
-    color: #e6edf3;
-    border: 1px solid #2a3340;
-    border-radius: 7px;
-    padding: 4px 6px;
-    font: 0.85rem var(--mono);
-    text-align: center;
-  }
-  .btn.step {
-    padding: 4px 10px;
-    font-weight: 700;
-  }
-  .offunit {
-    font-family: var(--mono);
-    color: #8b93a3;
-  }
   .cov b {
     color: #7ee0a0;
   }
@@ -315,7 +282,8 @@
     font-size: 0.8rem;
   }
   .timeline {
-    max-height: 320px;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow: auto;
     border: 1px solid #1c232e;
     border-radius: 8px;
@@ -363,44 +331,6 @@
     color: #6b7482;
     font-style: italic;
     padding-top: 14px;
-  }
-  .exports {
-    margin-top: 12px;
-  }
-  .tabs {
-    display: flex;
-    gap: 6px;
-    margin-bottom: 6px;
-  }
-  .tab {
-    background: #0f1218;
-    color: #9aa6b2;
-    border: 1px solid #2a3340;
-    border-radius: 7px;
-    padding: 4px 10px;
-    cursor: pointer;
-    font-size: 0.8rem;
-  }
-  .tab.on {
-    border-color: #4fd1c5;
-    color: #cdeef0;
-  }
-  .exout {
-    margin: 0 0 8px;
-    max-height: 150px;
-    overflow: auto;
-    background: #0b0f16;
-    border: 1px solid #1c232e;
-    border-radius: 8px;
-    padding: 8px 10px;
-    font: 0.72rem/1.45 var(--mono);
-    white-space: pre;
-    color: #cfd7e2;
-  }
-  .exbtns {
-    display: flex;
-    gap: 8px;
-    align-items: center;
   }
   .btn {
     background: #0f1218;

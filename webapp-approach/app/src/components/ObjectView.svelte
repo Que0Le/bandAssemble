@@ -74,7 +74,7 @@
   .text {
     font-family: var(--mono);
     font-size: 1rem;
-    line-height: 1.5;
+    line-height: var(--lyric-lh, 1.5);
     color: #e8edf5;
     white-space: pre;
   }
@@ -90,7 +90,7 @@
   .strum {
     font-family: var(--mono);
     font-size: 1rem;
-    line-height: 1.5;
+    line-height: var(--lyric-lh, 1.5);
     color: #9fe0b0;
     margin-top: 2px;
     /* preserve the author's spaces so strokes align to the words above */
