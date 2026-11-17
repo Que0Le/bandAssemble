@@ -38,7 +38,7 @@
       <span class="cd-text">{obj.name} [{obj.grip}]</span>
     {/if}
   </div>
-{:else}
+{:else if obj.type === 'line'}
   {#if obj.kind && obj.kind !== 'lyric'}<div class="kind-chip">{obj.kind}</div>{/if}
   {#if obj.text}
     <div class="text">
@@ -53,6 +53,9 @@
   {/if}
   {#if obj.strum}<div class="strum">{obj.strum}</div>{/if}
   {#if obj.note}<div class="note">{obj.note}</div>{/if}
+{:else}
+  <!-- Unknown / future block kind: never render blank — show its raw content. -->
+  <pre class="tab">{JSON.stringify(obj)}</pre>
 {/if}
 
 <style>
@@ -142,5 +145,9 @@
     margin: 2px 0 0;
     white-space: pre;
     user-select: text;
+    /* A wide tab/drum system scrolls inside its own box instead of stretching
+       the page (important on phones — tab can't wrap meaningfully). */
+    overflow-x: auto;
+    max-width: 100%;
   }
 </style>
