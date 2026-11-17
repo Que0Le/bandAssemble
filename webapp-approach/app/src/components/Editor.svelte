@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import { objectIndexAt } from '../lib/model';
+  import { fly } from 'svelte/transition';
+  import { objectIndexAt, isComment } from '../lib/model';
   import type { SongObject } from '../lib/model';
   import {
     roles,
@@ -75,12 +76,18 @@
   // next line's start won't silently close the gap they just made. Not persisted.
   let explicitEnd = new Set<number>();
 
-  let copied = $state('');
-  let flash: ReturnType<typeof setTimeout> | undefined;
+  // Status toasts — float top-right, overlay without reflow, auto-dismiss after
+  // 5s, and close immediately when clicked.
+  let toasts = $state<{ id: number; msg: string; kind: 'ok' | 'err' }[]>([]);
+  let toastSeq = 0;
+  function dismissToast(id: number) {
+    toasts = toasts.filter((t) => t.id !== id);
+  }
   function note(msg: string) {
-    copied = msg;
-    clearTimeout(flash);
-    flash = setTimeout(() => (copied = ''), 1600);
+    const kind: 'ok' | 'err' = /fail|bad|error|couldn|isn't|⚠|not /i.test(msg) ? 'err' : 'ok';
+    const id = ++toastSeq;
+    toasts = [...toasts, { id, msg, kind }];
+    setTimeout(() => dismissToast(id), 5000);
   }
 
   const activeIdx = $derived(objectIndexAt(objects, curTime));
@@ -186,7 +193,7 @@
   // The helper hands us a generated chart JSON; load it through the normal JSON
   // path (parse() detects JSON → keeps all timestamps, normalizes the box to
   // markup). We don't auto-wire its output into the Sheet — only this button does.
-  function useFromHelper(chartJson: string, source: { chords: string; lrc: string; offset: number }) {
+  function useFromHelper(chartJson: string, source: { chords: string; lrc: string }) {
     let rid = 'guitar';
     let songTitle = '';
     try {
@@ -243,6 +250,25 @@
     if (mediaEl) mediaEl.currentTime = Math.max(0, sec);
   }
 
+  // Offset the whole chart's timing (the Sheet's offset) — live in the Timing
+  // panel. Unlike the helper's alignment, this shifts the actual objects' times.
+  let nudgeStep = $state<number | null>(0.1);
+  const stepNum = $derived(typeof nudgeStep === 'number' && isFinite(nudgeStep) ? nudgeStep : 0.1);
+  function shiftAll(d: number) {
+    if (!objects.length || !d) return;
+    for (const o of objects) {
+      o.startSec = r2(Math.max(0, o.startSec + d));
+      o.endSec = r2(Math.max(0, o.endSec + d));
+    }
+    objects = objects; // nudge reactivity
+  }
+  // Raw chart JSON for the collapsible viewer below the helper.
+  const rawJson = $derived(JSON.stringify({ title, roleId, objects }, null, 2));
+
+  // Lyric line height in the Preview — defaults to 3 (2× the base 1.5) and is
+  // adjustable via the slider; applied as a CSS var so only the Preview changes.
+  let lineH = $state(3);
+
   const playhead = () => r2(mediaEl ? mediaEl.currentTime : curTime);
 
   // S — mark the current line's START at the playhead. Keep lines contiguous by
@@ -263,15 +289,27 @@
     objects[cur].endSec = playhead();
     explicitEnd.add(cur);
   }
-  // N / P — move the current line; no stamping.
+  // N / P — move the current line; no stamping. Skip comment blocks: they're
+  // annotations, not timed lines.
   function next() {
-    if (cur < objects.length - 1) cur++;
+    for (let i = cur + 1; i < objects.length; i++) {
+      if (!isComment(objects[i])) {
+        cur = i;
+        return;
+      }
+    }
   }
   function prev() {
-    if (cur > 0) cur--;
+    for (let i = cur - 1; i >= 0; i--) {
+      if (!isComment(objects[i])) {
+        cur = i;
+        return;
+      }
+    }
   }
   function resetTaps() {
-    cur = 0;
+    const first = objects.findIndex((o) => !isComment(o));
+    cur = first < 0 ? 0 : first;
     explicitEnd = new Set();
     note('back to first line');
   }
@@ -409,16 +447,36 @@
     <button class="btn" onclick={resetProject} title="Discard unsaved edits — reload this project from storage"
       >↺ Reset</button
     >
-    {#if copied}<span class="flash">{copied}</span>{/if}
   </div>
 
-  <!-- Import helper: paste chords + an LRC → a timed chart, then "Use as sheet".
-       Sits above the Sheet + Timing panels; collapsed by default. -->
+  <!-- Status toasts: float over the top-right corner, overlay without reflow, and
+       close on click. The container ignores pointer events so it never blocks the
+       view; only the toasts themselves are clickable. -->
+  <div class="toasts" aria-live="polite">
+    {#each toasts as t (t.id)}
+      <button
+        class="toast {t.kind}"
+        transition:fly={{ x: 40, duration: 220 }}
+        onclick={() => dismissToast(t.id)}
+        title="dismiss"
+      >
+        {t.msg}
+      </button>
+    {/each}
+  </div>
+
+  <!-- Import helper (full width): Chords | LRC, then Combined + action buttons. -->
   <TimingChordHelper onUse={useFromHelper} initial={meta.base.import} />
 
-  <div class="ed-grid">
-    <!-- left: paste + parse -->
-    <div class="panel">
+  <!-- Raw chart JSON, collapsible. -->
+  <details class="rawjson">
+    <summary>🧾 Raw chart JSON</summary>
+    <pre class="rawout">{rawJson}</pre>
+  </details>
+
+  <!-- Sheet | Preview, above the timing area. -->
+  <div class="ed-row">
+    <div class="panel sheet-col">
       <h2>Sheet (paste or type)</h2>
       <textarea
         class="sheet"
@@ -434,9 +492,36 @@
       </div>
     </div>
 
-    <!-- right: timing + tap -->
-    <div class="panel">
-      <h2>Timing</h2>
+    <div class="panel prev-col">
+      <h2>Preview</h2>
+      <label class="lh-ctl"
+        >line height
+        <input type="range" min="1.2" max="5" step="0.1" bind:value={lineH} aria-label="lyric line height" />
+        <span class="lh-val">{lineH.toFixed(1)}×</span>
+      </label>
+      <div class="prev" style="--lyric-lh: {lineH}">
+        {#each objects as o, i (o.id)}
+          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+          <div
+            class="pobj"
+            class:on={i === activeIdx}
+            role="button"
+            tabindex="-1"
+            title="Double-click to jump the video here"
+            ondblclick={() => seekTo(o.startSec)}
+          >
+            <ObjectView obj={o} />
+          </div>
+        {/each}
+      </div>
+    </div>
+  </div>
+
+  <!-- Timing: one column. The video + controls stay sticky at the top while the
+       lines scroll past them. -->
+  <div class="panel timing-col">
+    <h2>Timing</h2>
+    <div class="timing-head">
       <div class="row">
         <label class="file"
           >load media <input type="file" accept="audio/*,video/*" onchange={onFile} /></label
@@ -493,50 +578,47 @@
           </p>
         {/if}
       {:else}
-        <p class="hint">Load an audio or video file to tap-to-time, or edit the seconds directly below.</p>
+        <p class="hint">Load the video to tap-to-time, or edit the seconds directly in the table below.</p>
       {/if}
-
-      <div class="tbl">
-        {#each objects as o, i (o.id)}
-          <div class="trow" class:on={i === activeIdx} class:cur={i === cur}>
-            <span class="k {o.type}">{o.type}</span>
-            <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-            <span
-              class="c"
-              role="button"
-              tabindex="-1"
-              title="Click to make this the current line, then S / E to mark"
-              onclick={() => (cur = i)}>{preview(o)}</span
-            >
-            <input
-              class="t"
-              type="number"
-              step="0.1"
-              value={o.startSec}
-              onchange={(e) => (o.startSec = +(e.currentTarget as HTMLInputElement).value)}
-            />
-            <input
-              class="t"
-              type="number"
-              step="0.1"
-              value={o.endSec}
-              onchange={(e) => (o.endSec = +(e.currentTarget as HTMLInputElement).value)}
-            />
-            <button class="x" title="seek" onclick={() => seekTo(o.startSec)}>▸</button>
-            <button class="x" title="remove" onclick={() => removeObj(i)}>✕</button>
-          </div>
-        {/each}
-      </div>
+      {#if objects.length}
+        <div class="row off-row">
+          <span class="off">Offset</span>
+          <button class="btn step" onclick={() => shiftAll(-stepNum)} title="shift all lines earlier" aria-label="shift earlier">&lt;</button>
+          <input class="offnum" type="number" step="0.1" bind:value={nudgeStep} aria-label="nudge step in seconds" />
+          <button class="btn step" onclick={() => shiftAll(stepNum)} title="shift all lines later" aria-label="shift later">&gt;</button>
+          <span class="offunit">s</span>
+          <span class="hint">nudge every line's time earlier/later to lock the chart to the video</span>
+        </div>
+      {/if}
     </div>
-  </div>
-
-  <!-- preview -->
-  <div class="panel">
-    <h2>Preview</h2>
-    <div class="prev">
+    <div class="tbl">
       {#each objects as o, i (o.id)}
-        <div class="pobj" class:on={i === activeIdx}>
-          <ObjectView obj={o} />
+        <div class="trow" class:on={i === activeIdx} class:cur={i === cur} class:comment={isComment(o)}>
+          <span class="k {o.type}">{o.type}</span>
+          <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+          <span
+            class="c"
+            role="button"
+            tabindex="-1"
+            title="Click to make this the current line, then S / E to mark"
+            onclick={() => (cur = i)}>{preview(o)}</span
+          >
+          <input
+            class="t"
+            type="number"
+            step="0.1"
+            value={o.startSec}
+            onchange={(e) => (o.startSec = +(e.currentTarget as HTMLInputElement).value)}
+          />
+          <input
+            class="t"
+            type="number"
+            step="0.1"
+            value={o.endSec}
+            onchange={(e) => (o.endSec = +(e.currentTarget as HTMLInputElement).value)}
+          />
+          <button class="x" title="seek" onclick={() => seekTo(o.startSec)}>▸</button>
+          <button class="x" title="remove" onclick={() => removeObj(i)}>✕</button>
         </div>
       {/each}
     </div>
@@ -545,9 +627,90 @@
 
 <style>
   .editor {
-    max-width: 1100px;
+    max-width: 1500px;
     margin: 0 auto;
     padding: 16px;
+    overflow: visible; /* the window scrolls, not this section (see below) */
+  }
+  /* Full-width panels (Sheet, Preview) between the rows get the row gap too. */
+  .editor > .panel {
+    margin-bottom: 16px;
+  }
+  /* Use the browser's own scrollbar here, not the fixed app-shell inner scroll:
+     let the shell grow with the content so the whole window scrolls instead. */
+  :global(html:has(.editor)),
+  :global(body:has(.editor)) {
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
+  }
+  :global(#app:has(.editor)) {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+  /* Raw chart JSON viewer (collapsible). */
+  .rawjson {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 0 14px;
+    margin-bottom: 16px;
+  }
+  .rawjson summary {
+    cursor: pointer;
+    padding: 12px 2px;
+    color: var(--muted);
+    font-weight: 600;
+    user-select: none;
+  }
+  .rawout {
+    margin: 0 0 14px;
+    max-height: 320px;
+    overflow: auto;
+    background: #0b0f16;
+    border: 1px solid #1c232e;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font: 0.72rem/1.45 var(--mono);
+    white-space: pre;
+    color: #cfd7e2;
+  }
+  /* Timing is one column: the video + controls stick to the top while the lines
+     scroll past them. */
+  .timing-head {
+    flex: 0 0 auto;
+    background: var(--panel);
+    padding-bottom: 8px;
+    margin-bottom: 4px;
+    box-shadow: 0 8px 10px -8px rgba(0, 0, 0, 0.6);
+  }
+  .off-row {
+    align-items: center;
+  }
+  .off {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #8b93a3;
+  }
+  .offnum {
+    width: 58px;
+    background: #0f1218;
+    color: #e6edf3;
+    border: 1px solid #2a3340;
+    border-radius: 7px;
+    padding: 4px 6px;
+    font: 0.85rem var(--mono);
+    text-align: center;
+  }
+  .btn.step {
+    padding: 4px 10px;
+    font-weight: 700;
+  }
+  .offunit {
+    font-family: var(--mono);
+    color: #8b93a3;
   }
   .ed-head {
     display: flex;
@@ -568,9 +731,39 @@
     padding: 6px 10px;
     min-width: 260px;
   }
-  .flash {
-    color: #9fe0b0;
-    font-size: 0.82rem;
+  /* Toasts float over the top-right corner. The container never blocks clicks;
+     each toast does (so it can be clicked to dismiss). */
+  .toasts {
+    position: fixed;
+    top: 14px;
+    right: 14px;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-end;
+    pointer-events: none;
+  }
+  .toast {
+    pointer-events: auto;
+    cursor: pointer;
+    text-align: left;
+    min-width: 190px;
+    max-width: 340px;
+    border: 1px solid #2f6b45;
+    border-left-width: 3px;
+    border-radius: 8px;
+    background: #10251a;
+    color: #bdf0cf;
+    padding: 9px 12px;
+    font-size: 0.85rem;
+    font-family: inherit;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  }
+  .toast.err {
+    border-color: #7a2d2d;
+    background: #2a1414;
+    color: #f5c0c0;
   }
   .role-sel {
     display: inline-flex;
@@ -592,21 +785,63 @@
   .open-lbl input {
     display: none;
   }
-  .ed-grid {
+  /* Each working section is a 2-column row: Timing | Video, then Sheet | Preview
+     (the helper above lays out its own Chords | LRC and Combined | Output rows). */
+  /* Sheet + Preview share one clear container (a bordered box). On wide screens
+     it has a fixed height, and the Timing panel below is set to the same height. */
+  .ed-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 16px;
     margin-bottom: 16px;
+    align-items: stretch;
+    border: 1px solid var(--line);
+    background: #0d1218;
+    border-radius: 14px;
+    padding: 12px;
+    overflow: hidden;
+    resize: vertical; /* drag the bottom edge to resize the whole container */
   }
-  @media (max-width: 820px) {
-    .ed-grid {
+  /* Inside the container the two panels are flush columns, not nested cards; each
+     scrolls on its own if its (resizable) content outgrows the container. */
+  .ed-row > .panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
+    overflow: auto;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+  }
+  /* Timing matches the container's height: the video + controls are a fixed head,
+     and only the table scrolls below them, so lines never slide under the video. */
+  .timing-col {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    resize: vertical; /* drag the bottom edge to give the lines more room */
+  }
+  @media (min-width: 901px) {
+    .ed-row {
+      height: 624px;
+    }
+    .timing-col {
+      /* Tall enough for ~12 line rows (31px each) beneath the video + controls. */
+      height: 820px;
+    }
+  }
+  @media (max-width: 900px) {
+    .ed-row {
       grid-template-columns: 1fr;
     }
   }
   .sheet {
     width: 100%;
-    height: 320px;
-    resize: vertical;
+    flex: 1 1 auto;
+    min-height: 260px;
+    resize: none;
     font-family: var(--mono);
     font-size: 0.92rem;
     line-height: 1.5;
@@ -625,7 +860,7 @@
   }
   .vid {
     width: 100%;
-    max-height: 360px;
+    max-height: 190px;
     background: #000;
     border-radius: 8px;
     margin-top: 6px;
@@ -654,9 +889,9 @@
     color: #6b7482;
   }
   .tbl {
-    margin-top: 10px;
-    max-height: 300px;
-    overflow: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
     border-top: 1px solid #1c232e;
   }
   .trow {
@@ -675,6 +910,16 @@
   }
   .trow.cur .c {
     color: #ffcf6b;
+  }
+  /* Comment blocks: not part of the timing — dim the line and mute its values
+     (kept, not discarded, so a line can be commented out without losing time). */
+  .trow.comment .c {
+    color: #6b7482;
+    font-style: italic;
+  }
+  .trow.comment .k,
+  .trow.comment .t {
+    opacity: 0.5;
   }
   .k {
     font-size: 0.66rem;
@@ -729,17 +974,43 @@
     border-color: #4fd1c5;
   }
   .prev {
-    max-height: 40vh;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow: auto;
     padding: 4px 6px;
+  }
+  /* Preview line-height control. */
+  .lh-ctl {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin: 0 0 8px;
+    flex: 0 0 auto;
+  }
+  .lh-ctl input[type='range'] {
+    width: 130px;
+  }
+  .lh-val {
+    font-variant-numeric: tabular-nums;
+    color: #cdd6e2;
   }
   .pobj {
     padding: 5px 8px;
     border-radius: 6px;
     opacity: 0.6;
+    cursor: pointer;
   }
   .pobj.on {
     opacity: 1;
     background: #161f2a;
+  }
+  /* Phone: stack to one column and let the page scroll — drop the inner scroll
+     boxes so there's no box-inside-a-scrolling-page double scroll. */
+  @media (max-width: 640px) {
+    .sheet {
+      min-height: 220px;
+    }
   }
 </style>
