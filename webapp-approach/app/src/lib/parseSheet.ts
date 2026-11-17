@@ -12,6 +12,7 @@
 
 import type { SongObject, LineObject } from './model';
 import { gripToFrets } from './chords';
+import { r2 } from './util';
 
 const SECTION_RE = /^\[([^\]]+)\]$/;
 // Any 1–3 char string label followed by a bar: guitar (e B G D A E), bass, and
@@ -36,6 +37,18 @@ const looksChord = (t: string) =>
 let uid = 0;
 const nid = () => `e${uid++}`;
 
+// A standalone "(…)" note object directly above a tab block becomes its caption;
+// pop it off so it isn't also rendered as a separate note line. Shared by the
+// fenced and labelled tab branches.
+function captionFromPrev(objs: SongObject[]): string | undefined {
+  const prev = objs[objs.length - 1];
+  if (prev && prev.type === 'line' && prev.note && !prev.text && !prev.strum) {
+    objs.pop();
+    return prev.note;
+  }
+  return undefined;
+}
+
 export function parseSheet(text: string): SongObject[] {
   const lines = text.replace(/\r\n/g, '\n').split('\n');
   const objs: SongObject[] = [];
@@ -59,14 +72,7 @@ export function parseSheet(text: string): SongObject[] {
     if (fm) {
       i++; // consume the opening fence line
       // caption: inline "(…)" on the fence line, else a standalone "(…)" above.
-      let caption = fm[1]?.trim() || undefined;
-      if (!caption) {
-        const prev = objs[objs.length - 1];
-        if (prev && prev.type === 'line' && prev.note && !prev.text && !prev.strum) {
-          caption = prev.note;
-          objs.pop();
-        }
-      }
+      let caption = fm[1]?.trim() || captionFromPrev(objs);
       let cur: string[] = [];
       const flush = () => {
         if (!cur.length) return;
@@ -94,12 +100,7 @@ export function parseSheet(text: string): SongObject[] {
         i++;
       }
       // A standalone "(…)" note immediately above becomes the block's caption.
-      let caption: string | undefined;
-      const prev = objs[objs.length - 1];
-      if (prev && prev.type === 'line' && prev.note && !prev.text && !prev.strum) {
-        caption = prev.note;
-        objs.pop();
-      }
+      const caption = captionFromPrev(objs);
       objs.push({ type: 'tab', id: nid(), startSec: 0, endSec: 0, lines: tabLines, ...(caption ? { caption } : {}) });
       last = null;
       continue;
@@ -246,7 +247,7 @@ export function carryTimes(next: SongObject[], prev: SongObject[]): SongObject[]
   for (const o of next) {
     if (o.type === 'label' || o.type === 'chorddef') continue;
     if (o.startSec <= prevStart) {
-      o.startSec = Math.round((prevStart + 0.01) * 100) / 100;
+      o.startSec = r2(prevStart + 0.01);
       if (o.endSec < o.startSec) o.endSec = o.startSec;
     }
     prevStart = o.startSec;

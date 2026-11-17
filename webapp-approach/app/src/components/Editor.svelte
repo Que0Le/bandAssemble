@@ -90,12 +90,13 @@
   // Parse the sheet box. If it holds JSON (a copied chart — array of objects, or
   // {objects} / {title,roleId,objects}), load it verbatim so all timestamps are
   // kept; otherwise parse the text markup (which carries no times → placeholders).
+  // JSON chart draft ({…} or an array of objects) vs. text markup, which can
+  // legitimately start with a [Section] label — so only `{` or `[{`/`["` is JSON.
+  const looksLikeJson = (trimmed: string) => trimmed.startsWith('{') || /^\[\s*[{"]/.test(trimmed);
+
   function parse() {
     const trimmed = sheet.trim();
-    // JSON chart? ({…} or an array of objects). A markup sheet legitimately starts
-    // with a [Section] label, so only take the JSON path when it actually looks
-    // like JSON (`{` or `[{`/`["`); otherwise fall through to the text parser.
-    if (trimmed.startsWith('{') || /^\[\s*[{"]/.test(trimmed)) {
+    if (looksLikeJson(trimmed)) {
       try {
         loadJson(trimmed);
       } catch (e) {
@@ -116,8 +117,7 @@
   function scheduleLive() {
     clearTimeout(liveTimer);
     liveTimer = setTimeout(() => {
-      const trimmed = sheet.trim();
-      if (trimmed.startsWith('{') || /^\[\s*[{"]/.test(trimmed)) return;
+      if (looksLikeJson(sheet.trim())) return;
       objects = carryTimes(parseSheet(sheet), objects);
     }, 500);
   }
