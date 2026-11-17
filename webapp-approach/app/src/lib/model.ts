@@ -6,6 +6,7 @@ export interface ObjBase {
   id: string;
   startSec: number;
   endSec: number; // for 'label' this is ignored (a label is a point)
+  ext?: Record<string, unknown>; // forward-compat metadata bag; ignored by old code, round-trips in JSON
 }
 
 // The workhorse — one displayed flow line. kind says what it is (lyric by

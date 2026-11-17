@@ -16,7 +16,7 @@
     activeId,
   } from '../view.svelte';
   import { getMediaUrl } from '../lib/media';
-  import { parseSheet, autoTime, reTime } from '../lib/parseSheet';
+  import { parseSheet, carryTimes, reTime } from '../lib/parseSheet';
   import { objectsText } from '../lib/serialize';
   import { copyText } from '../lib/clipboard';
   import { r2, secToClock, clockToSec } from '../lib/util';
@@ -92,7 +92,10 @@
   // kept; otherwise parse the text markup (which carries no times → placeholders).
   function parse() {
     const trimmed = sheet.trim();
-    if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+    // JSON chart? ({…} or an array of objects). A markup sheet legitimately starts
+    // with a [Section] label, so only take the JSON path when it actually looks
+    // like JSON (`{` or `[{`/`["`); otherwise fall through to the text parser.
+    if (trimmed.startsWith('{') || /^\[\s*[{"]/.test(trimmed)) {
       try {
         loadJson(trimmed);
       } catch (e) {
@@ -100,10 +103,23 @@
       }
       return;
     }
-    objects = autoTime(parseSheet(sheet));
-    cur = 0;
+    objects = carryTimes(parseSheet(sheet), objects); // keep existing timings by content
     explicitEnd = new Set();
-    note('parsed ' + objects.length + ' objects');
+    note('parsed ' + objects.length + ' objects · times kept');
+  }
+
+  // Live re-parse: a short debounce after you stop typing reflects sheet edits in
+  // the Preview/table without clicking Parse. Times are carried by content, so
+  // nothing you've timed is lost. JSON drafts wait for the explicit button (they'd
+  // otherwise rewrite the box mid-edit).
+  let liveTimer: ReturnType<typeof setTimeout> | undefined;
+  function scheduleLive() {
+    clearTimeout(liveTimer);
+    liveTimer = setTimeout(() => {
+      const trimmed = sheet.trim();
+      if (trimmed.startsWith('{') || /^\[\s*[{"]/.test(trimmed)) return;
+      objects = carryTimes(parseSheet(sheet), objects);
+    }, 500);
   }
 
   // A timestamp field: prefer the human "startMin"/"endMin" clock ("1:42") when
@@ -127,6 +143,7 @@
         id: 'j' + i,
         startSec: pickSec(o.startMin, o.startSec),
         endSec: pickSec(o.endMin, o.endSec),
+        ...(o.ext && typeof o.ext === 'object' ? { ext: o.ext as Record<string, unknown> } : {}),
       };
       if (o.type === 'label') return { ...base, type: 'label', text: String(o.text ?? '') } as SongObject;
       if (o.type === 'tab')
@@ -284,10 +301,23 @@
     if (cur >= objects.length) cur = Math.max(0, objects.length - 1);
   }
 
+  // Each tab block's 1-based ordinal among tab blocks, so a captionless tab can
+  // show "line 1", "line 2", … in the timing list.
+  const tabNo = $derived.by(() => {
+    const m = new Map<string, number>();
+    let n = 0;
+    for (const o of objects) if (o.type === 'tab') m.set(o.id, ++n);
+    return m;
+  });
+
   function preview(o: SongObject): string {
     if (o.type === 'label') return '[' + o.text + ']';
     if (o.type === 'chorddef') return o.name + ' [' + o.grip + ']';
-    if (o.type === 'tab') return 'tab · ' + o.lines.length + ' rows';
+    if (o.type === 'tab') {
+      const cap = o.caption?.trim();
+      if (cap) return cap.length > 30 ? cap.slice(0, 30) + '...' : cap;
+      return 'line ' + (tabNo.get(o.id) ?? '?');
+    }
     const kind = o.kind && o.kind !== 'lyric' ? '@' + o.kind + ' ' : '';
     return kind + (o.text || o.strum || (o.note ? '(' + o.note + ')' : '(empty)'));
   }
@@ -393,6 +423,7 @@
       <textarea
         class="sheet"
         bind:value={sheet}
+        oninput={scheduleLive}
         spellcheck="false"
         placeholder={'[Verse]\n[G]Lyrics with inline [C]chords\n↓ ↓↑ ↓↑\n(a note)'}
       ></textarea>

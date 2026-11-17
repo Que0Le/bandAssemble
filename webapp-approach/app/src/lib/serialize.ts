@@ -10,8 +10,9 @@ export function objectText(o: SongObject): string {
   if (o.type === 'label') return `[${o.text}]`; // section header on its own line
   if (o.type === 'chorddef') return `${o.name} [${o.grip}]`; // custom fingering
   if (o.type === 'tab') {
-    const cap = o.caption ? `${o.caption}\n` : '';
-    return cap + o.lines.join('\n');
+    // Fence it so it always re-parses back to one block, even unlabelled rows.
+    const cap = o.caption ? ` (${o.caption})` : '';
+    return '```tab' + cap + '\n' + o.lines.join('\n') + '\n```';
   }
   // line: the flow row (@kind prefix for non-lyric), then strum, then note
   const rows: string[] = [];
@@ -26,7 +27,7 @@ export function objectText(o: SongObject): string {
 export function objectsText(objects: SongObject[]): string {
   const out: string[] = [];
   for (const o of objects) {
-    if (o.type === 'label') out.push(''); // blank line before a section
+    if (o.type === 'label' || o.type === 'tab') out.push(''); // blank before a section / tab block
     out.push(objectText(o));
   }
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';

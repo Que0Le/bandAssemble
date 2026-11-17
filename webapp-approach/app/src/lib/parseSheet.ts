@@ -3,7 +3,8 @@
 //   Name [x02010]        -> chorddef   (custom chord fingering; not timed)
 //   [Section]            -> label      (whole-line bracket, not a chord)
 //   @kind text           -> line       (typed flow line: @solo, @instrumental, …)
-//   e| / B| / G| ...     -> tab block  (consecutive string rows)
+//   ```tab (caption)     -> tab block  (fenced; blank line splits systems)
+//   e| / B| / G| ...     -> tab block  (consecutive labelled string rows)
 //   ↓ ↑ × > ~ (glyphs)   -> strum      (attached to the line above, else its own)
 //   (anything)           -> note       (attached to the line above, else its own)
 //   everything else      -> line       (a lyric flow line with inline [chords])
@@ -13,7 +14,17 @@ import type { SongObject, LineObject } from './model';
 import { gripToFrets } from './chords';
 
 const SECTION_RE = /^\[([^\]]+)\]$/;
-const TAB_RE = /^[eBGDAE]\s*\|/;
+// Any 1–3 char string label followed by a bar: guitar (e B G D A E), bass, and
+// drums (HH SD BD CC FT …) all gather into one tab block. Section/chorddef/note
+// checks run first, so a lyric line isn't misread.
+const TAB_RE = /^[A-Za-z]{1,3}\s*\|/;
+// Explicit fence — the reliable way to mark tab, including hand-drawn /
+// unlabelled rows the TAB_RE heuristic can't catch. Everything between the
+// opening ```tab (optional caption) and the closing ``` is read as tab; a blank
+// line inside splits systems into separate blocks, each independently timed and
+// jumpable (so a long solo isn't one giant highlight on a small screen).
+const FENCE_RE = /^`{3,}\s*tab\b\s*(?:\(([^)]*)\))?\s*$/i;
+const FENCE_END_RE = /^`{3,}\s*$/;
 const STRUM_RE = /^[\s↓↑×xX><~•._/\\]+$/u;
 const NOTE_RE = /^\((.*)\)$/;
 const CHORDDEF_RE = /^(\S+)\s+\[([^\]]+)\]$/; // "Am7 [x02010]" / "Am7 [x 0 12 0 1 0]"
@@ -41,6 +52,40 @@ export function parseSheet(text: string): SongObject[] {
       continue;
     }
 
+    // fenced tab: ```tab (caption) … ``` — unlabelled / hand-drawn rows work,
+    // and a blank line inside splits systems into separate blocks (each timed
+    // and jumpable). The caption rides on the first block.
+    const fm = t.match(FENCE_RE);
+    if (fm) {
+      i++; // consume the opening fence line
+      // caption: inline "(…)" on the fence line, else a standalone "(…)" above.
+      let caption = fm[1]?.trim() || undefined;
+      if (!caption) {
+        const prev = objs[objs.length - 1];
+        if (prev && prev.type === 'line' && prev.note && !prev.text && !prev.strum) {
+          caption = prev.note;
+          objs.pop();
+        }
+      }
+      let cur: string[] = [];
+      const flush = () => {
+        if (!cur.length) return;
+        objs.push({ type: 'tab', id: nid(), startSec: 0, endSec: 0, lines: cur, ...(caption ? { caption } : {}) });
+        caption = undefined; // first block only
+        cur = [];
+      };
+      while (i < lines.length && !FENCE_END_RE.test(lines[i].trim())) {
+        const row = lines[i].replace(/\s+$/, '');
+        if (row.trim() === '') flush();
+        else cur.push(row);
+        i++;
+      }
+      flush();
+      if (i < lines.length) i++; // consume the closing fence
+      last = null;
+      continue;
+    }
+
     // tab block: gather consecutive string rows
     if (TAB_RE.test(t)) {
       const tabLines: string[] = [];
@@ -48,7 +93,14 @@ export function parseSheet(text: string): SongObject[] {
         tabLines.push(lines[i].replace(/\s+$/, ''));
         i++;
       }
-      objs.push({ type: 'tab', id: nid(), startSec: 0, endSec: 0, lines: tabLines });
+      // A standalone "(…)" note immediately above becomes the block's caption.
+      let caption: string | undefined;
+      const prev = objs[objs.length - 1];
+      if (prev && prev.type === 'line' && prev.note && !prev.text && !prev.strum) {
+        caption = prev.note;
+        objs.pop();
+      }
+      objs.push({ type: 'tab', id: nid(), startSec: 0, endSec: 0, lines: tabLines, ...(caption ? { caption } : {}) });
       last = null;
       continue;
     }
@@ -143,6 +195,61 @@ export function reTime(next: SongObject[], prev: SongObject[]): SongObject[] {
       if (next[i].type !== 'label' && next[i].type !== 'chorddef') t += 3;
       next[i].endSec = t;
     }
+  }
+  return next;
+}
+
+/** A content key for time-carry: two objects with the same key are "the same
+ *  block" regardless of position, so their timing is preserved across a re-parse. */
+function timeKey(o: SongObject): string {
+  const S = '\u0001';
+  if (o.type === 'label') return 'L' + S + o.text;
+  if (o.type === 'tab') return 'T' + S + o.lines.join(S);
+  if (o.type === 'chorddef') return 'C' + S + o.name + S + o.grip;
+  return 'l' + S + (o.text ?? '') + S + (o.strum ?? '') + S + (o.note ?? '') + S + (o.kind ?? '');
+}
+
+/**
+ * Carry per-object times across a re-parse, matched by CONTENT (not index), so
+ * inserting, editing or reordering a block keeps every *other* block's times;
+ * only new/changed blocks get a sequential placeholder to tap. This is what the
+ * Editor uses on re-parse so adding a solo tab mid-song doesn't wipe your timing.
+ */
+export function carryTimes(next: SongObject[], prev: SongObject[]): SongObject[] {
+  const pools = new Map<string, Array<{ s: number; e: number }>>();
+  for (const o of prev) {
+    const k = timeKey(o);
+    let q = pools.get(k);
+    if (!q) pools.set(k, (q = []));
+    q.push({ s: o.startSec, e: o.endSec });
+  }
+  let t = 0;
+  for (const o of next) {
+    const hit = pools.get(timeKey(o))?.shift();
+    if (hit) {
+      o.startSec = hit.s;
+      o.endSec = hit.e;
+      t = hit.e;
+    } else {
+      o.startSec = t;
+      if (o.type !== 'label' && o.type !== 'chorddef') t += 3;
+      o.endSec = t;
+    }
+  }
+  // Keep the timed flow strictly increasing in start, so an inserted block that
+  // landed exactly on its neighbour's start (two blocks were back-to-back, no gap
+  // to borrow) stays reachable: objectIndexAt resolves a tie to the LATER index,
+  // which would otherwise hide the earlier block (you could jump to 1 and 3 but
+  // not an inserted 2). Labels/chorddefs are markers that may share a line's
+  // start, so they don't participate. The nudge is 0.01s — imperceptible.
+  let prevStart = -Infinity;
+  for (const o of next) {
+    if (o.type === 'label' || o.type === 'chorddef') continue;
+    if (o.startSec <= prevStart) {
+      o.startSec = Math.round((prevStart + 0.01) * 100) / 100;
+      if (o.endSec < o.startSec) o.endSec = o.startSec;
+    }
+    prevStart = o.startSec;
   }
   return next;
 }
