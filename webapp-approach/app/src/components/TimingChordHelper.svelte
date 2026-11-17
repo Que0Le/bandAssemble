@@ -18,7 +18,9 @@
   // Seed once from the saved paste (a one-time prefill, not a live binding).
   let chordsText = $state(untrack(() => initial?.chords ?? ''));
   let lrcText = $state(untrack(() => initial?.lrc ?? ''));
-  let offset = $state(untrack(() => initial?.offset ?? 0));
+  let offset = $state<number | null>(untrack(() => initial?.offset ?? 0)); // null while the field is cleared
+  const offNum = $derived(typeof offset === 'number' && isFinite(offset) ? offset : 0);
+  const bumpOffset = (d: number) => (offset = Math.round((offNum + d) * 10) / 10);
   // Open state is local (bind:open), seeded once — NOT a controlled attribute, so
   // a re-render (e.g. moving the offset slider) can't snap the panel shut.
   let open = $state(!!untrack(() => initial?.chords));
@@ -37,7 +39,7 @@
 
   const mmss = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
 
-  const result = $derived(buildImport(chordsText, lrcText, offset));
+  const result = $derived(buildImport(chordsText, lrcText, offNum));
   const aligned = $derived(result.aligned);
   const objs = $derived(result.objects);
   const metaOut = $derived(result.meta);
@@ -97,7 +99,7 @@
   }
   function useAsSheet() {
     if (!objs.length) return note('paste chords + an LRC first');
-    onUse(chartJson, { chords: chordsText, lrc: lrcText, offset });
+    onUse(chartJson, { chords: chordsText, lrc: lrcText, offset: offNum });
     note('sent to Sheet');
   }
 
@@ -110,7 +112,7 @@
   $effect(() => {
     if (!syncWithSheet || !objs.length) return;
     const json = chartJson;
-    const src = { chords: chordsText, lrc: lrcText, offset };
+    const src = { chords: chordsText, lrc: lrcText, offset: offNum };
     untrack(() => onUse(json, src));
   });
 
@@ -203,9 +205,12 @@
       <!-- Offset lives at the bottom so it's next to the video in the Timing
            panel below — nudge while watching to lock the chart to the recording. -->
       <div class="ctl">
-        <label class="off">Offset <input type="range" min="-5" max="5" step="0.1" bind:value={offset} /></label>
-        <span class="offv">{offset.toFixed(1)}s</span>
-        <span class="hint">nudge to lock the chart to the video below</span>
+        <span class="off">Offset</span>
+        <button class="btn step" onclick={() => bumpOffset(-0.1)} title="−0.1 s" aria-label="decrease offset">&lt;</button>
+        <input class="offnum" type="number" step="0.1" bind:value={offset} aria-label="offset in seconds" />
+        <button class="btn step" onclick={() => bumpOffset(0.1)} title="+0.1 s" aria-label="increase offset">&gt;</button>
+        <span class="offunit">s</span>
+        <span class="hint">nudge to lock the chart to the video below (type any value)</span>
       </div>
     {/if}
   </div>
@@ -284,9 +289,23 @@
     align-items: center;
     gap: 8px;
   }
-  .offv {
+  .offnum {
+    width: 64px;
+    background: #0f1218;
+    color: #e6edf3;
+    border: 1px solid #2a3340;
+    border-radius: 7px;
+    padding: 4px 6px;
+    font: 0.85rem var(--mono);
+    text-align: center;
+  }
+  .btn.step {
+    padding: 4px 10px;
+    font-weight: 700;
+  }
+  .offunit {
     font-family: var(--mono);
-    min-width: 42px;
+    color: #8b93a3;
   }
   .cov b {
     color: #7ee0a0;
