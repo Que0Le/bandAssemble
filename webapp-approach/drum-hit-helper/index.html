@@ -63,6 +63,15 @@
       .content i.edited { outline: 1px solid #fff; outline-offset: 0; opacity: 1; }
       .content .lyr { position: absolute; font: 10px var(--mono); color: var(--lyric); white-space: nowrap; overflow: hidden; max-width: 140px; opacity: .85; pointer-events: none; }
       .content .ph { position: absolute; top: 0; width: 2px; background: #fff; box-shadow: 0 0 6px rgba(255,255,255,.7); pointer-events: none; z-index: 5; }
+      .tabpanel { border-top: 1px solid var(--line); }
+      .tabpanel > summary { cursor: pointer; padding: 10px 18px; font-weight: 600; user-select: none; }
+      .tabctl { display: flex; align-items: center; gap: 14px; padding: 0 18px 8px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+      .tabctl label { display: inline-flex; align-items: center; gap: 6px; }
+      .tabctl input[type='number'] { width: 62px; background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; font: 13px var(--mono); }
+      .tabctl select { background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
+      .tabctl button { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 12px; cursor: pointer; font-size: 13px; }
+      .tabctl button:hover { border-color: var(--accent); }
+      .tabout { margin: 0 18px 16px; padding: 12px; background: #0b0f16; border: 1px solid var(--line); border-radius: 8px; font: 12px/1.5 var(--mono); color: #cfd6e2; white-space: pre; overflow: auto; max-height: 320px; }
       .hint { padding: 12px 18px; color: var(--muted); font-size: 12.5px; }
       .hint b { color: var(--fg); }
       kbd { font: 11px var(--mono); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; color: var(--fg); }
@@ -112,6 +121,20 @@
         </div>
       </div>
     </div>
+
+    <details class="tabpanel" open>
+      <summary>🥁 Drum tab — quantized export</summary>
+      <div class="tabctl">
+        <label>BPM <input id="bpm" type="number" min="40" max="300" step="1" value="120" /></label>
+        <label>Grid
+          <select id="grid"><option value="2">8th</option><option value="4" selected>16th</option></select>
+        </label>
+        <label>Start <input id="offset" type="number" step="0.01" value="0" /> s</label>
+        <button id="copytab" title="Copy the tab text">⧉ Copy</button>
+        <button id="dltab" title="Download as .txt">⭳ Download</button>
+      </div>
+      <pre id="tabout" class="tabout">Load a track — the tab is generated from the detected / edited hits.</pre>
+    </details>
 
     <p class="hint">
       <b>Click</b> a track to seek. <b>Double-click</b> a lane to add a hit (snaps to a detected

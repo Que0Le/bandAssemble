@@ -5,6 +5,7 @@
 // the keyboard, and map an uploaded .lrc onto a timed lyric track.
 
 import { analyze, repick, decodeFile } from './classify.js';
+import { estimateTempo, toDrumTab } from './drumtab.js';
 
 const $ = (id) => document.getElementById(id);
 const file = $('file');
@@ -23,6 +24,12 @@ const tcur = $('tcur');
 const tdur = $('tdur');
 const candtog = $('candtog');
 const karaoke = $('karaoke');
+const bpm = $('bpm');
+const grid = $('grid');
+const offsetInput = $('offset');
+const copytab = $('copytab');
+const dltab = $('dltab');
+const tabout = $('tabout');
 
 const AXIS_H = 22;
 const LANE_H = 64;
@@ -32,6 +39,7 @@ let state = null; // { duration, sampleRate, lanes:[...], candidates:[...] }
 let lyrics = null; // [{ t, text }] sorted, or null
 let pxPerSec = Number(zoom.value);
 let mediaUrl = null;
+let mediaName = '';
 let raf = 0;
 
 const fmt = (t) => {
@@ -59,6 +67,7 @@ file.addEventListener('change', async () => {
   if (!f) return;
   if (mediaUrl) URL.revokeObjectURL(mediaUrl);
   mediaUrl = URL.createObjectURL(f);
+  mediaName = f.name.replace(/\.[^.]+$/, '');
   video.src = mediaUrl;
 
   state = null;
@@ -81,6 +90,7 @@ file.addEventListener('change', async () => {
     const ms = Math.round(performance.now() - t0);
     buildGutter();
     drawPlot();
+    seedTab();
     setStatus(`done in ${ms} ms · ${countsText()} · ${fmt(state.duration)} long`, 'ok');
   } catch (err) {
     console.error(err);
@@ -171,6 +181,7 @@ function buildGutter() {
       recompute(l); // re-apply manual edits on top
       refreshCount(l);
       queueDraw();
+      renderTab();
       setStatus(`${countsText()} · tuning — drag a lane slider`, 'ok');
     });
   }
@@ -270,6 +281,7 @@ content.addEventListener('dblclick', (e) => {
   toggleAt(l, t);
   refreshCount(l);
   queueDraw();
+  renderTab();
   setStatus(`${countsText()} · edited ${l.name}`, 'ok');
   e.preventDefault();
 });
@@ -326,6 +338,7 @@ function tapIn(idx) {
   addHit(l, video.currentTime);
   refreshCount(l);
   queueDraw();
+  renderTab();
   setStatus(`${countsText()} · tapped ${l.name}`, 'ok');
 }
 document.addEventListener('keydown', (e) => {
@@ -372,6 +385,69 @@ function updateKaraoke(t) {
   karaoke.textContent = cur ? cur.text : '';
   if (!cur) karaoke.innerHTML = '<span class="none">♪</span>';
 }
+
+// ---- drum tab: quantized view + export ------------------------------------
+
+const tabOpts = () => ({ bpm: Number(bpm.value), subdiv: Number(grid.value), offset: Number(offsetInput.value) || 0 });
+
+function renderTab() {
+  if (!state) return;
+  tabout.textContent = toDrumTab(state.lanes, tabOpts()) || '(no hits yet)';
+}
+
+// On a fresh analysis: seed the BPM from the kick+snare pulse and align the grid
+// to the first kick, then render. The user fine-tunes BPM/grid/start by eye.
+function seedTab() {
+  const bd = state.lanes.find((l) => l.id === 'bd');
+  const sd = state.lanes.find((l) => l.id === 'sd');
+  const ks = [...(bd ? bd.onsets : []), ...(sd ? sd.onsets : [])];
+  bpm.value = String(estimateTempo(ks, state.duration));
+  offsetInput.value = bd && bd.onsets.length ? bd.onsets[0].toFixed(2) : '0';
+  renderTab();
+}
+
+for (const el of [bpm, grid, offsetInput]) el.addEventListener('input', renderTab);
+
+async function copyTab() {
+  const text = tabout.textContent;
+  // navigator.clipboard needs a secure context — absent over plain http on the
+  // LAN (phones), so fall back to a hidden textarea + execCommand.
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      setStatus('tab copied', 'ok');
+      return;
+    }
+  } catch { /* fall through */ }
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch { /* ignore */ }
+  ta.remove();
+  setStatus(ok ? 'tab copied' : 'couldn’t copy — select the tab and copy manually', ok ? 'ok' : 'bad');
+}
+
+function downloadTab() {
+  const text = tabout.textContent;
+  if (!text || !state) return;
+  const blob = new Blob([text + '\n'], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${mediaName || 'drum'}-drums.txt`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  setStatus('tab downloaded', 'ok');
+}
+
+copytab.addEventListener('click', copyTab);
+dltab.addEventListener('click', downloadTab);
 
 // ---- init -----------------------------------------------------------------
 
