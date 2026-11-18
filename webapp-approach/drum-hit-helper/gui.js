@@ -38,6 +38,7 @@ const setAbtn = $('setA');
 const setBbtn = $('setB');
 const clearabBtn = $('clearab');
 const repeatbtn = $('repeatbtn');
+const resetEditsBtn = $('resetedits');
 const barstog = $('barstog');
 const abreadout = $('abreadout');
 
@@ -607,7 +608,25 @@ function stampPattern() {
   setStatus(`repeated the ${period.toFixed(2)}s pattern ${copies}× to the end`, 'ok');
 }
 
+// Revert every lane to pure detection — clears all adds, removes and stamped
+// patterns in one go (the detection + thresholds themselves are untouched).
+function resetEdits() {
+  if (!state) return;
+  let n = 0;
+  for (const l of state.lanes) {
+    n += l.added.length + l.removed.length;
+    l.added = [];
+    l.removed = [];
+    recompute(l);
+    refreshCount(l);
+  }
+  drawPlot();
+  renderTab();
+  setStatus(n ? `cleared ${n} hand edits — back to detection` : 'no hand edits to clear', n ? 'ok' : '');
+}
+
 loopbtn.addEventListener('click', toggleLoop);
+resetEditsBtn.addEventListener('click', resetEdits);
 setAbtn.addEventListener('click', setLoopA);
 setBbtn.addEventListener('click', setLoopB);
 clearabBtn.addEventListener('click', clearLoop);
