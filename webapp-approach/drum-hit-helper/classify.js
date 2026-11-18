@@ -81,7 +81,7 @@ function envelope(data) {
 /** Peak-pick onsets from an energy envelope.
  *  - positive log-flux (level-robust rise detection)
  *  - adaptive threshold = local-mean-flux × k, scaled by `sensitivity`
- *  - an absolute gate (ignore hits in near-silent stretches)
+ *  - a per-band energy gate (reject cross-band leakage + near-silent stretches)
  *  - a refractory period so one hit isn't counted several times
  *  Returns onset times in seconds. Pure + fast, so the UI re-runs this live on
  *  the cached envelope when you move the sensitivity slider (no re-decode). */

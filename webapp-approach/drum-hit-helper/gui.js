@@ -1,4 +1,4 @@
-// Drum-tab generator — review + edit GUI.
+// Drum-hit helper — review + edit GUI.
 // Upload a media file → decode + analyze on upload → a lane timeline
 // (hi-hat / snare / kick) with a playhead locked to the <video>. Each lane has a
 // live threshold slider; you can hand-edit hits (double-click), tap them in from
@@ -47,6 +47,10 @@ const near = (t, arr, tol) => {
 // Which rows are drawn: the detected lanes, plus the lyric row when loaded.
 const rows = () => (lyrics ? [...state.lanes, LYRIC] : state.lanes);
 const countsText = () => state.lanes.map((l) => `${l.onsets.length} ${l.name}`).join(' · ');
+// A lane's gutter count: hit total + an "✎N" marker once it has manual edits.
+const countLabel = (l) => (l.lyric ? `${lyrics.length}` : `${l.onsets.length}${l.editCount ? ` ✎${l.editCount}` : ''}`);
+// Escape .lrc text before it goes into innerHTML.
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // ---- upload media → analyze ----------------------------------------------
 
@@ -116,8 +120,8 @@ function snap(t) {
   return best === null ? t : best;
 }
 
-function addHit(l, t, { snapTo = true } = {}) {
-  const place = snapTo ? snap(t) : t;
+function addHit(l, t) {
+  const place = snap(t); // snaps to the nearest candidate if close, else the exact time
   if (near(place, l.onsets, Math.max(0.03, 4 / pxPerSec)) !== null) return; // already one here
   const rem = near(place, l.removed, 0.05);
   if (rem !== null) l.removed = l.removed.filter((x) => x !== rem); // un-delete a detected hit
@@ -148,7 +152,7 @@ function buildGutter() {
       <div class="gtop">
         <span class="dot" style="background:${l.color}"></span>
         <span class="nm">${l.name}</span>
-        <span class="ct" id="ct-${l.id}" style="color:${l.color}">${l.lyric ? lyrics.length : l.onsets.length}</span>
+        <span class="ct" id="ct-${l.id}" style="color:${l.color}">${countLabel(l)}</span>
       </div>
       ${
         l.lyric
@@ -174,7 +178,7 @@ function buildGutter() {
 
 function refreshCount(l) {
   const el = $(`ct-${l.id}`);
-  if (el) el.textContent = l.onsets.length + (l.editCount ? ` ✎${l.editCount}` : '');
+  if (el) el.textContent = countLabel(l);
 }
 
 // ---- plot -----------------------------------------------------------------
@@ -235,8 +239,6 @@ function drawPlot() {
   movePlayhead(video.currentTime || 0);
 }
 
-const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-
 function movePlayhead(t) {
   ph.style.left = t * pxPerSec + 'px';
   tcur.textContent = fmt(t);
@@ -283,7 +285,8 @@ candtog.addEventListener('change', () => { if (state) queueDraw(); });
 
 // ---- transport (custom bar below the video) -------------------------------
 
-pp.addEventListener('click', () => (video.paused ? video.play() : video.pause()));
+const togglePlay = () => (video.paused ? video.play() : video.pause());
+pp.addEventListener('click', togglePlay);
 seek.addEventListener('input', () => {
   if (isFinite(video.duration)) {
     const t = (Number(seek.value) / 100) * video.duration;
@@ -328,7 +331,7 @@ function tapIn(idx) {
 document.addEventListener('keydown', (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   const k = e.key.toLowerCase();
-  if (e.code === 'Space' || k === ' ') { e.preventDefault(); video.paused ? video.play() : video.pause(); }
+  if (e.code === 'Space' || k === ' ') { e.preventDefault(); togglePlay(); }
   else if (k === 'a') { e.preventDefault(); seekBy(e.shiftKey ? -1 : -0.1); }
   else if (k === 'd') { e.preventDefault(); seekBy(e.shiftKey ? 1 : 0.1); }
   else if (k === '1') tapIn(0);
