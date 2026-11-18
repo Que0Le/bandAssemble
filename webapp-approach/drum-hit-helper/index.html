@@ -42,6 +42,14 @@
       .ctrls .candtog { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }
       .karaoke { padding: 6px 18px; min-height: 30px; color: var(--lyric); font-size: 15px; font-weight: 600; border-bottom: 1px solid var(--line); }
       .karaoke .none { color: var(--muted); font-weight: 400; font-style: italic; }
+      .loopbar { display: flex; align-items: center; gap: 10px; padding: 8px 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+      .loopbar button { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
+      .loopbar button:hover { border-color: var(--accent); }
+      .loopbar button.on { border-color: var(--accent); color: var(--accent); }
+      .loopbar button:disabled { opacity: 0.45; cursor: default; }
+      .loopbar #repeatbtn { background: #1b3326; border-color: #2f6b45; color: #bdf0cf; }
+      .loopbar .ab { font: 12px var(--mono); color: var(--muted); min-width: 110px; }
+      .loopbar .bargrid { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; margin-left: auto; cursor: pointer; }
 
       .status { padding: 8px 18px; font: 12px/1.4 var(--mono); color: var(--muted); border-bottom: 1px solid var(--line); }
       .status.ok { color: var(--ok); } .status.bad { color: var(--bad); } .status.work { color: var(--work); }
@@ -67,6 +75,13 @@
       .content i.edited { outline: 1px solid #fff; outline-offset: 0; opacity: 1; }
       .content .lyr { position: absolute; font: 10px var(--mono); color: var(--lyric); white-space: nowrap; overflow: hidden; max-width: 140px; opacity: .85; pointer-events: none; }
       .content .ph { position: absolute; top: 0; width: 2px; background: #fff; box-shadow: 0 0 6px rgba(255,255,255,.7); pointer-events: none; z-index: 5; }
+      .content .grid.bar { background: #3a4a63; }
+      .content .grid.beat { background: #1c2636; }
+      .content .barlab { position: absolute; top: 3px; font: 10px var(--mono); color: #7f93b5; }
+      .content .sel { position: absolute; top: 0; background: rgba(88,166,255,0.12); pointer-events: none; }
+      .content .abmark { position: absolute; top: 0; width: 2px; pointer-events: none; z-index: 4; }
+      .content .abmark.a { background: #3fb950; }
+      .content .abmark.b { background: #f0883e; }
       .tabpanel { border-top: 1px solid var(--line); }
       .tabpanel > summary { cursor: pointer; padding: 10px 18px; font-weight: 600; user-select: none; }
       .tabctl { display: flex; align-items: center; gap: 14px; padding: 0 18px 8px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
@@ -117,6 +132,16 @@
       </div>
     </div>
 
+    <div class="loopbar">
+      <button id="loopbtn" title="Loop the A–B range (L)" disabled>⟲ Loop</button>
+      <button id="setA" title="Set loop start at the playhead ([)">Set A</button>
+      <button id="setB" title="Set loop end at the playhead (])">Set B</button>
+      <button id="clearab" title="Clear the A–B range">clear</button>
+      <span class="ab" id="abreadout">A – · B –</span>
+      <button id="repeatbtn" title="Tile the A–B groove (grid-locked) to the end">⟲ Repeat pattern → end</button>
+      <label class="bargrid" title="Show bar / beat lines from BPM + Start"><input id="barstog" type="checkbox" checked /> bar grid</label>
+    </div>
+
     <div class="karaoke" id="karaoke"><span class="none">— no lyrics loaded —</span></div>
 
     <div class="status" id="status">Upload an audio or video file — analysis runs automatically when it finishes decoding.</div>
@@ -149,7 +174,8 @@
       <span style="color:var(--cand)">candidate</span> if one is close, else drops where you click) — double-click a hit to remove it.
       Hand-edited hits are <b>outlined</b> and survive threshold tuning.
       Keys: <kbd>Space</kbd> play/pause · <kbd>A</kbd>/<kbd>D</kbd> ∓0.1s (<kbd>⇧</kbd> ∓1s) ·
-      <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> tap a hi-hat/snare/kick at the playhead.
+      <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> tap hi-hat/snare/kick · <kbd>[</kbd>/<kbd>]</kbd> set loop A/B · <kbd>L</kbd> loop.
+      Pick an A–B range, then <b>Repeat pattern</b> tiles that groove (grid-locked to BPM) to the end.
     </p>
 
     <script type="module" src="/gui.js"></script>

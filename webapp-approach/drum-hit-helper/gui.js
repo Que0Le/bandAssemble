@@ -33,6 +33,13 @@ const tabout = $('tabout');
 const clearMediaBtn = $('clearmedia');
 const clearLrcBtn = $('clearlrc');
 const lrcoffset = $('lrcoffset');
+const loopbtn = $('loopbtn');
+const setAbtn = $('setA');
+const setBbtn = $('setB');
+const clearabBtn = $('clearab');
+const repeatbtn = $('repeatbtn');
+const barstog = $('barstog');
+const abreadout = $('abreadout');
 
 const AXIS_H = 22;
 const LANE_H = 64;
@@ -45,6 +52,7 @@ let pxPerSec = Number(zoom.value);
 let mediaUrl = null;
 let mediaName = '';
 let raf = 0;
+let loopA = null, loopB = null, looping = false; // A–B range (seconds) + loop state
 
 const fmt = (t) => {
   if (!isFinite(t)) t = 0;
@@ -56,6 +64,12 @@ const near = (t, arr, tol) => {
   for (const x of arr) if (Math.abs(x - t) <= tol) return x;
   return null;
 };
+// Musical grid, shared with the drum-tab panel (BPM + Start offset). Used for the
+// bar overlay, A/B snapping, and the grid-locked pattern repeat.
+const beatDur = () => 60 / (Number(bpm.value) || 120);
+const barDur = () => 4 * beatDur();
+const gridOffset = () => Number(offsetInput.value) || 0;
+const snapToBar = (t) => { const bd = barDur(); return Math.max(0, gridOffset() + Math.round((t - gridOffset()) / bd) * bd); };
 // Which rows are drawn: the detected lanes, plus the lyric row when loaded.
 const rows = () => (lyrics ? [...state.lanes, LYRIC] : state.lanes);
 const countsText = () => state.lanes.map((l) => `${l.onsets.length} ${l.name}`).join(' · ');
@@ -214,12 +228,27 @@ function drawPlot() {
   content.style.height = height + 'px';
 
   let html = '';
-  const step = pxPerSec >= 80 ? 1 : pxPerSec >= 40 ? 2 : 5;
-  for (let s = 0; s <= state.duration; s += step) {
-    const x = s * pxPerSec;
-    const major = s % 5 === 0;
-    html += `<div class="grid${major ? ' major' : ''}" style="left:${x}px;height:${height}px"></div>`;
-    if (major) html += `<div class="axlab" style="left:${x + 3}px">${fmt(s)}</div>`;
+  if (barstog.checked && Number(bpm.value) > 0) {
+    // bar-grid overlay from BPM + Start: bar lines (bright, numbered) + beats (faint)
+    const off = gridOffset(), bd = beatDur();
+    for (let i = 0, t = off; t <= state.duration + 1e-6; i++, t = off + i * bd) {
+      if (t < 0) continue;
+      const x = t * pxPerSec;
+      const isBar = i % 4 === 0;
+      html += `<div class="grid ${isBar ? 'bar' : 'beat'}" style="left:${x.toFixed(1)}px;height:${height}px"></div>`;
+      if (isBar) html += `<div class="barlab" style="left:${(x + 2).toFixed(1)}px">${i / 4 + 1}</div>`;
+    }
+  } else {
+    const step = pxPerSec >= 80 ? 1 : pxPerSec >= 40 ? 2 : 5;
+    for (let s = 0; s <= state.duration; s += step) {
+      const x = s * pxPerSec;
+      const major = s % 5 === 0;
+      html += `<div class="grid${major ? ' major' : ''}" style="left:${x}px;height:${height}px"></div>`;
+      if (major) html += `<div class="axlab" style="left:${x + 3}px">${fmt(s)}</div>`;
+    }
+  }
+  if (loopA != null && loopB != null) {
+    html += `<div class="sel" style="left:${(loopA * pxPerSec).toFixed(1)}px;width:${((loopB - loopA) * pxPerSec).toFixed(1)}px;height:${height}px"></div>`;
   }
   // candidate guide (faint full-height lines) — snap targets. Off by default:
   // a dense mix has a transient every ~60ms, so shown they're a wall. Snapping
@@ -248,6 +277,8 @@ function drawPlot() {
       }
     }
   });
+  if (loopA != null) html += `<div class="abmark a" style="left:${(loopA * pxPerSec).toFixed(1)}px;height:${height}px"></div>`;
+  if (loopB != null) html += `<div class="abmark b" style="left:${(loopB * pxPerSec).toFixed(1)}px;height:${height}px"></div>`;
   content.innerHTML = html;
   content.appendChild(ph);
   ph.style.height = height + 'px';
@@ -318,6 +349,7 @@ video.addEventListener('seeked', () => movePlayhead(video.currentTime));
 video.addEventListener('timeupdate', () => { if (video.paused) movePlayhead(video.currentTime); });
 
 function loop() {
+  if (looping && loopA != null && loopB != null && video.currentTime >= loopB) video.currentTime = loopA;
   const t = video.currentTime;
   movePlayhead(t);
   const x = t * pxPerSec;
@@ -354,6 +386,9 @@ document.addEventListener('keydown', (e) => {
   else if (k === '1') tapIn(0);
   else if (k === '2') tapIn(1);
   else if (k === '3') tapIn(2);
+  else if (k === '[') { e.preventDefault(); setLoopA(); }
+  else if (k === ']') { e.preventDefault(); setLoopB(); }
+  else if (k === 'l') { e.preventDefault(); toggleLoop(); }
 });
 
 // ---- LRC → timed lyric track ----------------------------------------------
@@ -405,6 +440,11 @@ function clearMedia() {
   video.load();
   mediaName = '';
   state = null;
+  loopA = null;
+  loopB = null;
+  looping = false;
+  loopbtn.classList.remove('on');
+  updateAB();
   content.innerHTML = '';
   content.appendChild(ph);
   gutter.innerHTML = '';
@@ -457,7 +497,7 @@ function seedTab() {
   renderTab();
 }
 
-for (const el of [bpm, grid, offsetInput]) el.addEventListener('input', renderTab);
+for (const el of [bpm, grid, offsetInput]) el.addEventListener('input', () => { renderTab(); if (state) drawPlot(); });
 
 async function copyTab() {
   const text = tabout.textContent;
@@ -500,7 +540,82 @@ function downloadTab() {
 copytab.addEventListener('click', copyTab);
 dltab.addEventListener('click', downloadTab);
 
+// ---- loop + grid-locked pattern repeat ------------------------------------
+
+function updateAB() {
+  abreadout.textContent = `A ${loopA != null ? fmt(loopA) : '–'} · B ${loopB != null ? fmt(loopB) : '–'}`;
+  const ready = loopA != null && loopB != null;
+  loopbtn.disabled = !ready;
+  if (!ready && looping) { looping = false; loopbtn.classList.remove('on'); }
+}
+function setLoopA() {
+  if (!state) return;
+  loopA = snapToBar(video.currentTime);
+  if (loopB != null && loopB <= loopA) loopB = null;
+  updateAB();
+  drawPlot();
+}
+function setLoopB() {
+  if (!state) return;
+  if (loopA == null) { setStatus('set A first ( [ )', 'bad'); return; }
+  let b = snapToBar(video.currentTime);
+  if (b <= loopA) b = loopA + barDur(); // at least one bar
+  loopB = Math.min(b, state.duration);
+  updateAB();
+  drawPlot();
+}
+function clearLoop() {
+  loopA = null;
+  loopB = null;
+  looping = false;
+  loopbtn.classList.remove('on');
+  updateAB();
+  if (state) drawPlot();
+}
+function toggleLoop() {
+  if (loopA == null || loopB == null) return;
+  looping = !looping;
+  loopbtn.classList.toggle('on', looping);
+  if (looping && (video.currentTime < loopA || video.currentTime >= loopB)) { video.currentTime = loopA; movePlayhead(loopA); }
+}
+
+// Tile the A–B groove to the end, grid-locked. The pattern (hits in A–B,
+// quantized to the grid) repeats every (B−A) seconds. Via the edit-override
+// model: clear the detected hits in the fill range, add the tiled hits — so it's
+// non-destructive and survives threshold tuning (shown as ✎).
+function stampPattern() {
+  if (!state) return;
+  if (loopA == null || loopB == null || loopB <= loopA) { setStatus('set an A–B range first ( [ and ] )', 'bad'); return; }
+  const period = loopB - loopA;
+  const cellDur = beatDur() / (Number(grid.value) || 4);
+  const totalPat = state.lanes.reduce((s, l) => s + l.onsets.filter((t) => t >= loopA - 1e-6 && t < loopB - 1e-6).length, 0);
+  if (totalPat === 0) { setStatus('no hits in the A–B range to repeat', 'bad'); return; }
+  for (const l of state.lanes) {
+    const pat = l.onsets.filter((t) => t >= loopA - 1e-6 && t < loopB - 1e-6).map((t) => Math.round((t - loopA) / cellDur) * cellDur);
+    if (!pat.length) continue; // this lane isn't part of the selected groove — leave it untouched
+    for (const a of l.auto) if (a >= loopB && a < state.duration && near(a, l.removed, 0.02) === null) l.removed.push(a);
+    l.added = l.added.filter((t) => t < loopB || t >= state.duration);
+    for (let start = loopB; start < state.duration; start += period) {
+      for (const rel of pat) { const t = start + rel; if (t < state.duration) l.added.push(t); }
+    }
+    recompute(l);
+    refreshCount(l);
+  }
+  const copies = Math.floor((state.duration - loopB) / period);
+  drawPlot();
+  renderTab();
+  setStatus(`repeated the ${period.toFixed(2)}s pattern ${copies}× to the end`, 'ok');
+}
+
+loopbtn.addEventListener('click', toggleLoop);
+setAbtn.addEventListener('click', setLoopA);
+setBbtn.addEventListener('click', setLoopB);
+clearabBtn.addEventListener('click', clearLoop);
+repeatbtn.addEventListener('click', stampPattern);
+barstog.addEventListener('change', () => state && drawPlot());
+
 // ---- init -----------------------------------------------------------------
 
 zoomVal.textContent = pxPerSec + ' px/s';
+updateAB();
 window.addEventListener('resize', () => state && queueDraw());
