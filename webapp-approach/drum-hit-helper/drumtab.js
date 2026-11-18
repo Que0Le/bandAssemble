@@ -36,7 +36,7 @@ export function estimateTempo(times, duration) {
  *  is the downbeat time in seconds. Blocks of `barsPerLine` bars are separated by
  *  a blank line — which is also how bandAssemble's ```tab fence splits systems,
  *  so the output drops straight into a Sheet. */
-export function toDrumTab(lanes, { bpm, offset = 0, subdiv = 4, beatsPerBar = 4, barsPerLine = 4, separate = false } = {}) {
+export function toDrumTab(lanes, { bpm, offset = 0, subdiv = 4, beatsPerBar = 4, barsPerLine = 4 } = {}) {
   if (!bpm || bpm <= 0) return '';
   const cell = 60 / bpm / subdiv; // seconds per grid cell
   const cellsPerBar = beatsPerBar * subdiv;
@@ -71,21 +71,11 @@ export function toDrumTab(lanes, { bpm, offset = 0, subdiv = 4, beatsPerBar = 4,
   };
 
   const out = [];
-  if (separate) {
-    // each track as its own full-length block, blank line between tracks
-    for (const r of rowsOut) {
-      for (let bar = 0; bar < totalBars; bar += barsPerLine) {
-        out.push(rowFor(r, bar, Math.min(barsPerLine, totalBars - bar)));
-      }
-      out.push('');
-    }
-  } else {
-    // interleaved: HH/SD/BD together, blank line between 4-bar systems
-    for (let bar = 0; bar < totalBars; bar += barsPerLine) {
-      const bars = Math.min(barsPerLine, totalBars - bar);
-      for (const r of rowsOut) out.push(rowFor(r, bar, bars));
-      out.push('');
-    }
+  // the included tracks interleaved, blank line between 4-bar systems
+  for (let bar = 0; bar < totalBars; bar += barsPerLine) {
+    const bars = Math.min(barsPerLine, totalBars - bar);
+    for (const r of rowsOut) out.push(rowFor(r, bar, bars));
+    out.push('');
   }
   return out.join('\n').replace(/\n+$/, '');
 }

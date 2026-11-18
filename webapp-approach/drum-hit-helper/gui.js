@@ -30,8 +30,6 @@ const offsetInput = $('offset');
 const copytab = $('copytab');
 const dltab = $('dltab');
 const tabout = $('tabout');
-const manualonly = $('manualonly');
-const septracks = $('septracks');
 const clearMediaBtn = $('clearmedia');
 const clearLrcBtn = $('clearlrc');
 const lrcoffset = $('lrcoffset');
@@ -77,12 +75,7 @@ const snapToBar = (t) => { const bd = barDur(); return Math.max(0, gridOffset() 
 const rows = () => (lyrics ? [...state.lanes, LYRIC] : state.lanes);
 const countsText = () => state.lanes.map((l) => `${l.onsets.length} ${l.name}`).join(' · ');
 // A lane's gutter count: hit total + an "✎N" marker once it has manual edits.
-const countLabel = (l) =>
-  l.lyric
-    ? `${lyrics.length}`
-    : manualonly.checked
-      ? `${l.added.length} ✎`
-      : `${l.onsets.length}${l.editCount ? ` ✎${l.editCount}` : ''}`;
+const countLabel = (l) => (l.lyric ? `${lyrics.length}` : `${l.onsets.length}${l.editCount ? ` ✎${l.editCount}` : ''}`);
 // Escape .lrc text before it goes into innerHTML.
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -279,8 +272,7 @@ function drawPlot() {
       const tickTop = top + 10;
       const tickH = LANE_H - 20;
       const addedSet = new Set(l.added);
-      const hits = manualonly.checked ? l.added : l.onsets; // "manual only" hides detection
-      for (const t of hits) {
+      for (const t of l.onsets) {
         const edited = addedSet.has(t) ? ' edited' : '';
         html += `<i class="${edited.trim()}" style="left:${(t * pxPerSec).toFixed(1)}px;top:${tickTop}px;height:${tickH}px;background:${l.color}"></i>`;
       }
@@ -490,12 +482,23 @@ function updateKaraoke(t) {
 
 const tabOpts = () => ({ bpm: Number(bpm.value), subdiv: Number(grid.value), offset: Number(offsetInput.value) || 0 });
 
+// Per-track tab sources: each lane can include its "synth" (detected) hits, its
+// "manual" (hand-added) hits, or both — independently, via the checkboxes. A
+// track with neither checked is left out of the tab entirely.
+const srcOn = (laneId, kind) => { const el = $(`${laneId}-${kind}`); return el ? el.checked : true; };
+function laneHits(l) {
+  const addedSet = new Set(l.added);
+  const hits = [];
+  if (srcOn(l.id, 'synth')) for (const t of l.onsets) if (!addedSet.has(t)) hits.push(t);
+  if (srcOn(l.id, 'manual')) hits.push(...l.added);
+  return hits.sort((a, b) => a - b);
+}
 function renderTab() {
   if (!state) return;
-  // "manual only" exports just the hand-added hits; "separate tracks" lays each
-  // lane out as its own block.
-  const lanes = state.lanes.map((l) => ({ id: l.id, onsets: manualonly.checked ? l.added : l.onsets }));
-  tabout.textContent = toDrumTab(lanes, { ...tabOpts(), separate: septracks.checked }) || '(no hits yet)';
+  const lanes = state.lanes
+    .filter((l) => srcOn(l.id, 'synth') || srcOn(l.id, 'manual'))
+    .map((l) => ({ id: l.id, onsets: laneHits(l) }));
+  tabout.textContent = toDrumTab(lanes, tabOpts()) || '(no tracks selected)';
 }
 
 // On a fresh analysis: seed the BPM from the kick+snare pulse and align the grid
@@ -546,37 +549,18 @@ function saveText(text, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-const LANE_FILE = { hh: 'hihat', sd: 'snare', bd: 'kick' };
-
-// With "separate tracks" on, save one file per track (kick / snare / hi-hat);
-// otherwise the combined tab. Respects "manual only".
 function downloadTab() {
-  if (!state) return;
-  const base = mediaName || 'drum';
-  if (septracks.checked) {
-    let saved = 0;
-    state.lanes.forEach((l, i) => {
-      const text = toDrumTab([{ id: l.id, onsets: manualonly.checked ? l.added : l.onsets }], tabOpts());
-      if (!text) return;
-      saved++;
-      setTimeout(() => saveText(text, `${base}-${LANE_FILE[l.id] || l.id}.txt`), i * 200);
-    });
-    setStatus(saved ? 'downloaded a tab per track (kick / snare / hi-hat)' : 'nothing to download', saved ? 'ok' : 'bad');
-  } else {
-    saveText(tabout.textContent, `${base}-drums.txt`);
-    setStatus('tab downloaded', 'ok');
-  }
+  if (!state || !tabout.textContent) return;
+  saveText(tabout.textContent, `${mediaName || 'drum'}-drums.txt`);
+  setStatus('tab downloaded', 'ok');
 }
 
 copytab.addEventListener('click', copyTab);
 dltab.addEventListener('click', downloadTab);
-manualonly.addEventListener('change', () => {
-  if (!state) return;
-  for (const l of state.lanes) refreshCount(l);
-  drawPlot();
-  renderTab();
-});
-septracks.addEventListener('change', renderTab);
+for (const id of ['hh-synth', 'hh-manual', 'sd-synth', 'sd-manual', 'bd-synth', 'bd-manual']) {
+  const el = $(id);
+  if (el) el.addEventListener('change', renderTab);
+}
 
 // ---- loop + grid-locked pattern repeat ------------------------------------
 
