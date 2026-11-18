@@ -30,6 +30,8 @@ const offsetInput = $('offset');
 const copytab = $('copytab');
 const dltab = $('dltab');
 const tabout = $('tabout');
+const manualonly = $('manualonly');
+const septracks = $('septracks');
 const clearMediaBtn = $('clearmedia');
 const clearLrcBtn = $('clearlrc');
 const lrcoffset = $('lrcoffset');
@@ -75,7 +77,12 @@ const snapToBar = (t) => { const bd = barDur(); return Math.max(0, gridOffset() 
 const rows = () => (lyrics ? [...state.lanes, LYRIC] : state.lanes);
 const countsText = () => state.lanes.map((l) => `${l.onsets.length} ${l.name}`).join(' · ');
 // A lane's gutter count: hit total + an "✎N" marker once it has manual edits.
-const countLabel = (l) => (l.lyric ? `${lyrics.length}` : `${l.onsets.length}${l.editCount ? ` ✎${l.editCount}` : ''}`);
+const countLabel = (l) =>
+  l.lyric
+    ? `${lyrics.length}`
+    : manualonly.checked
+      ? `${l.added.length} ✎`
+      : `${l.onsets.length}${l.editCount ? ` ✎${l.editCount}` : ''}`;
 // Escape .lrc text before it goes into innerHTML.
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -272,7 +279,8 @@ function drawPlot() {
       const tickTop = top + 10;
       const tickH = LANE_H - 20;
       const addedSet = new Set(l.added);
-      for (const t of l.onsets) {
+      const hits = manualonly.checked ? l.added : l.onsets; // "manual only" hides detection
+      for (const t of hits) {
         const edited = addedSet.has(t) ? ' edited' : '';
         html += `<i class="${edited.trim()}" style="left:${(t * pxPerSec).toFixed(1)}px;top:${tickTop}px;height:${tickH}px;background:${l.color}"></i>`;
       }
@@ -484,7 +492,10 @@ const tabOpts = () => ({ bpm: Number(bpm.value), subdiv: Number(grid.value), off
 
 function renderTab() {
   if (!state) return;
-  tabout.textContent = toDrumTab(state.lanes, tabOpts()) || '(no hits yet)';
+  // "manual only" exports just the hand-added hits; "separate tracks" lays each
+  // lane out as its own block.
+  const lanes = state.lanes.map((l) => ({ id: l.id, onsets: manualonly.checked ? l.added : l.onsets }));
+  tabout.textContent = toDrumTab(lanes, { ...tabOpts(), separate: septracks.checked }) || '(no hits yet)';
 }
 
 // On a fresh analysis: seed the BPM from the kick+snare pulse and align the grid
@@ -540,6 +551,13 @@ function downloadTab() {
 
 copytab.addEventListener('click', copyTab);
 dltab.addEventListener('click', downloadTab);
+manualonly.addEventListener('change', () => {
+  if (!state) return;
+  for (const l of state.lanes) refreshCount(l);
+  drawPlot();
+  renderTab();
+});
+septracks.addEventListener('change', renderTab);
 
 // ---- loop + grid-locked pattern repeat ------------------------------------
 

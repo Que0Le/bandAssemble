@@ -30,7 +30,9 @@
       .lrcoff input { width: 54px; background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; font: 12px var(--mono); }
 
       .vidwrap { padding: 12px 18px 0; }
-      video { display: block; width: 100%; max-height: 300px; background: #000; border-radius: 6px 6px 0 0; }
+      /* Drag the bottom edge to enlarge the player (native resize handle). */
+      .vidbox { height: 340px; min-height: 150px; max-height: 85vh; resize: vertical; overflow: hidden; background: #000; border-radius: 6px 6px 0 0; }
+      video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
       /* Custom transport, BELOW the video — never overlaps the picture. */
       .ctrls { display: flex; align-items: center; gap: 12px; padding: 8px 10px; background: var(--panel);
         border: 1px solid var(--line); border-top: none; border-radius: 0 0 6px 6px; }
@@ -123,7 +125,7 @@
     </div>
 
     <div class="vidwrap">
-      <video id="video" playsinline></video>
+      <div class="vidbox"><video id="video" playsinline></video></div>
       <div class="ctrls">
         <button id="pp" class="pp" title="Play / pause (Space)">▶</button>
         <input id="seek" type="range" min="0" max="100" step="0.01" value="0" />
@@ -164,6 +166,8 @@
           <select id="grid"><option value="2">8th</option><option value="4" selected>16th</option></select>
         </label>
         <label>Start <input id="offset" type="number" step="0.01" value="0" /> s</label>
+        <label title="Show / export only hand-added (manual) hits — hide detection"><input id="manualonly" type="checkbox" /> manual only</label>
+        <label title="Lay out each track (HH / SD / BD) as its own block"><input id="septracks" type="checkbox" /> separate tracks</label>
         <button id="copytab" title="Copy the tab text">⧉ Copy</button>
         <button id="dltab" title="Download as .txt">⭳ Download</button>
       </div>
