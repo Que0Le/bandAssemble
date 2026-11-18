@@ -1,0 +1,13 @@
+{
+  "name": "bandassemble-drum-hit-helper",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Throwaway prototype: detect kick/snare/hi-hat onsets from an uploaded mixed track with native Web Audio (band-energy flux), review them on a lane timeline synced to playback, and tune each lane's threshold live. No dependencies beyond Vite. Isolated from the app code.",
+  "scripts": {
+    "gui": "vite --port 5180 --strictPort"
+  },
+  "devDependencies": {
+    "vite": "^5.4.10"
+  }
+}

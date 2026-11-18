@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>bandAssemble · Drum-hit helper (prototype)</title>
+    <style>
+      :root {
+        --bg: #0d1117; --panel: #161b22; --line: #30363d; --fg: #e6edf3;
+        --muted: #8b949e; --accent: #58a6ff; --grid: #1b2230; --grid-major: #2b3647;
+        --cand: #4b5a74; --lyric: #b6a6ff;
+        --ok: #3fb950; --bad: #f85149; --work: #d29922;
+        --mono: ui-monospace, 'Cascadia Code', Consolas, monospace;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
+      header { padding: 12px 18px; border-bottom: 1px solid var(--line); display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+      header h1 { font-size: 16px; margin: 0; }
+      header .sub { color: var(--muted); font-size: 12px; }
+      .bar { padding: 12px 18px; border-bottom: 1px solid var(--line); display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+      .field { display: flex; align-items: center; gap: 8px; }
+      .field label { font-size: 12px; color: var(--muted); }
+      input[type='file'] { color: var(--muted); font-size: 13px; max-width: 220px; }
+      input[type='range'] { accent-color: var(--accent); }
+      .bar input[type='range'] { width: 150px; }
+      .val { font: 12px var(--mono); color: var(--fg); width: 58px; }
+
+      .vidwrap { padding: 12px 18px 0; }
+      video { display: block; width: 100%; max-height: 300px; background: #000; border-radius: 6px 6px 0 0; }
+      /* Custom transport, BELOW the video — never overlaps the picture. */
+      .ctrls { display: flex; align-items: center; gap: 12px; padding: 8px 10px; background: var(--panel);
+        border: 1px solid var(--line); border-top: none; border-radius: 0 0 6px 6px; }
+      .ctrls button.pp { width: 34px; height: 30px; font-size: 15px; background: var(--bg); color: var(--fg);
+        border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+      .ctrls button.pp:hover { border-color: var(--accent); }
+      #seek { flex: 1; }
+      .ctrls .time { font: 12px var(--mono); color: var(--muted); white-space: nowrap; }
+      .ctrls .candtog { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }
+      .karaoke { padding: 6px 18px; min-height: 30px; color: var(--lyric); font-size: 15px; font-weight: 600; border-bottom: 1px solid var(--line); }
+      .karaoke .none { color: var(--muted); font-weight: 400; font-style: italic; }
+
+      .status { padding: 8px 18px; font: 12px/1.4 var(--mono); color: var(--muted); border-bottom: 1px solid var(--line); }
+      .status.ok { color: var(--ok); } .status.bad { color: var(--bad); } .status.work { color: var(--work); }
+
+      .tl { display: flex; min-height: 0; }
+      .gutter { flex: 0 0 180px; border-right: 1px solid var(--line); background: var(--panel); }
+      .grow { display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 0 12px; border-bottom: 1px solid var(--line); }
+      .grow.axis-spacer { height: 22px; padding: 0; }
+      .gtop { display: flex; align-items: center; gap: 7px; }
+      .gtop .dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+      .gtop .nm { font-size: 13px; color: var(--fg); }
+      .gtop .ct { margin-left: auto; font: 600 13px var(--mono); }
+      .lsens { width: 100%; height: 14px; }
+      .gnote { font-size: 10px; color: var(--muted); }
+      .scroll { flex: 1; overflow-x: auto; overflow-y: hidden; }
+      .content { position: relative; cursor: crosshair; user-select: none; }
+      .content .grid { position: absolute; top: 0; width: 1px; background: var(--grid); }
+      .content .grid.major { background: var(--grid-major); }
+      .content .axlab { position: absolute; top: 3px; font: 10px var(--mono); color: var(--muted); }
+      .content .cand { position: absolute; top: 0; width: 1px; background: var(--cand); opacity: 0.5; }
+      .content.nocand .cand { display: none; }
+      .content .lane { position: absolute; left: 0; right: 0; width: 100%; border-bottom: 1px solid var(--line); }
+      .content i { position: absolute; width: 3px; border-radius: 1px; opacity: 0.92; }
+      .content i.edited { width: 3px; outline: 1px solid #fff; outline-offset: 0; opacity: 1; }
+      .content .lyr { position: absolute; font: 10px var(--mono); color: var(--lyric); white-space: nowrap; overflow: hidden; max-width: 140px; opacity: .85; pointer-events: none; }
+      .content .ph { position: absolute; top: 0; width: 2px; background: #fff; box-shadow: 0 0 6px rgba(255,255,255,.7); pointer-events: none; z-index: 5; }
+      .hint { padding: 12px 18px; color: var(--muted); font-size: 12.5px; }
+      .hint b { color: var(--fg); }
+      kbd { font: 11px var(--mono); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; color: var(--fg); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>🥁 bandAssemble · Drum-hit helper</h1>
+      <span class="sub">prototype — detect hi-hat / snare / kick, tune each lane, hand-edit hits, map an LRC lyric track</span>
+    </header>
+
+    <div class="bar">
+      <div class="field">
+        <label for="file">Media</label>
+        <input id="file" type="file" accept="audio/*,video/*" />
+      </div>
+      <div class="field">
+        <label for="lrc">LRC</label>
+        <input id="lrc" type="file" accept=".lrc,text/plain" />
+      </div>
+      <div class="field">
+        <label for="zoom">Zoom</label>
+        <input id="zoom" type="range" min="20" max="300" step="10" value="100" />
+        <span class="val" id="zoomVal">100 px/s</span>
+      </div>
+    </div>
+
+    <div class="vidwrap">
+      <video id="video" playsinline></video>
+      <div class="ctrls">
+        <button id="pp" class="pp" title="Play / pause (Space)">▶</button>
+        <input id="seek" type="range" min="0" max="100" step="0.01" value="0" />
+        <span class="time"><span id="tcur">0:00.0</span> / <span id="tdur">0:00.0</span></span>
+        <label class="candtog"><input id="candtog" type="checkbox" /> candidates</label>
+      </div>
+    </div>
+
+    <div class="karaoke" id="karaoke"><span class="none">— no lyrics loaded —</span></div>
+
+    <div class="status" id="status">Upload an audio or video file — analysis runs automatically when it finishes decoding.</div>
+
+    <div class="tl">
+      <div class="gutter" id="gutter"></div>
+      <div class="scroll" id="scroll">
+        <div class="content" id="content">
+          <div class="ph" id="ph"></div>
+        </div>
+      </div>
+    </div>
+
+    <p class="hint">
+      <b>Click</b> a track to seek. <b>Double-click</b> a lane to add a hit (snaps to a detected
+      <span style="color:var(--cand)">candidate</span> if one is close, else drops where you click) — double-click a hit to remove it.
+      Hand-edited hits are <b>outlined</b> and survive threshold tuning.
+      Keys: <kbd>Space</kbd> play/pause · <kbd>A</kbd>/<kbd>D</kbd> ∓0.1s (<kbd>⇧</kbd> ∓1s) ·
+      <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> tap a hi-hat/snare/kick at the playhead.
+    </p>
+
+    <script type="module" src="/gui.js"></script>
+  </body>
+</html>

@@ -1,0 +1,376 @@
+// Drum-tab generator — review + edit GUI.
+// Upload a media file → decode + analyze on upload → a lane timeline
+// (hi-hat / snare / kick) with a playhead locked to the <video>. Each lane has a
+// live threshold slider; you can hand-edit hits (double-click), tap them in from
+// the keyboard, and map an uploaded .lrc onto a timed lyric track.
+
+import { analyze, repick, decodeFile } from './classify.js';
+
+const $ = (id) => document.getElementById(id);
+const file = $('file');
+const lrcInput = $('lrc');
+const video = $('video');
+const status = $('status');
+const zoom = $('zoom');
+const zoomVal = $('zoomVal');
+const gutter = $('gutter');
+const scroll = $('scroll');
+const content = $('content');
+const ph = $('ph');
+const pp = $('pp');
+const seek = $('seek');
+const tcur = $('tcur');
+const tdur = $('tdur');
+const candtog = $('candtog');
+const karaoke = $('karaoke');
+
+const AXIS_H = 22;
+const LANE_H = 64;
+const LYRIC = { id: 'ly', name: 'lyric', color: '#b6a6ff', lyric: true };
+
+let state = null; // { duration, sampleRate, lanes:[...], candidates:[...] }
+let lyrics = null; // [{ t, text }] sorted, or null
+let pxPerSec = Number(zoom.value);
+let mediaUrl = null;
+let raf = 0;
+
+const fmt = (t) => {
+  if (!isFinite(t)) t = 0;
+  const m = Math.floor(t / 60);
+  const s = (t % 60).toFixed(1).padStart(4, '0');
+  return `${m}:${s}`;
+};
+const near = (t, arr, tol) => {
+  for (const x of arr) if (Math.abs(x - t) <= tol) return x;
+  return null;
+};
+// Which rows are drawn: the detected lanes, plus the lyric row when loaded.
+const rows = () => (lyrics ? [...state.lanes, LYRIC] : state.lanes);
+const countsText = () => state.lanes.map((l) => `${l.onsets.length} ${l.name}`).join(' · ');
+
+// ---- upload media → analyze ----------------------------------------------
+
+file.addEventListener('change', async () => {
+  const f = file.files && file.files[0];
+  if (!f) return;
+  if (mediaUrl) URL.revokeObjectURL(mediaUrl);
+  mediaUrl = URL.createObjectURL(f);
+  video.src = mediaUrl;
+
+  state = null;
+  content.innerHTML = '';
+  content.appendChild(ph);
+  gutter.innerHTML = '';
+  setStatus(`decoding “${f.name}”…`, 'work');
+  try {
+    const t0 = performance.now();
+    const buffer = await decodeFile(f);
+    setStatus('analysing bands…', 'work');
+    await new Promise((r) => setTimeout(r, 20));
+    state = await analyze(buffer, { sensitivity: 1 });
+    for (const l of state.lanes) {
+      l.sens = 1;
+      l.auto = l.onsets; // detection result
+      l.added = []; // hand-added times (survive re-pick)
+      l.removed = []; // detected hits the user deleted
+    }
+    const ms = Math.round(performance.now() - t0);
+    buildGutter();
+    drawPlot();
+    setStatus(`done in ${ms} ms · ${countsText()} · ${fmt(state.duration)} long`, 'ok');
+  } catch (err) {
+    console.error(err);
+    setStatus(`couldn't decode that file — ${err.message || err}`, 'bad');
+  }
+});
+
+function setStatus(msg, kind) {
+  status.textContent = msg;
+  status.className = 'status' + (kind ? ' ' + kind : '');
+}
+
+// ---- edit model: displayed = (auto − removed) ∪ added, matched by proximity --
+
+function recompute(l) {
+  const tol = 0.05;
+  const kept = l.auto.filter((a) => near(a, l.removed, tol) === null);
+  const all = [...kept, ...l.added].sort((a, b) => a - b);
+  const out = [];
+  for (const t of all) {
+    if (out.length && t - out[out.length - 1] <= 0.02) continue; // de-dupe
+    out.push(t);
+  }
+  l.onsets = out;
+  l.editCount = l.added.length + l.removed.length;
+}
+
+// snap a free time to the nearest candidate within tol, else keep it
+function snap(t) {
+  if (!state.candidates.length) return t;
+  const win = Math.max(0.12, 7 / pxPerSec);
+  let best = null, bd = win;
+  for (const c of state.candidates) {
+    const d = Math.abs(c - t);
+    if (d <= bd) { bd = d; best = c; }
+  }
+  return best === null ? t : best;
+}
+
+function addHit(l, t, { snapTo = true } = {}) {
+  const place = snapTo ? snap(t) : t;
+  if (near(place, l.onsets, Math.max(0.03, 4 / pxPerSec)) !== null) return; // already one here
+  const rem = near(place, l.removed, 0.05);
+  if (rem !== null) l.removed = l.removed.filter((x) => x !== rem); // un-delete a detected hit
+  else l.added.push(place);
+  recompute(l);
+}
+
+function toggleAt(l, t) {
+  const tol = Math.max(0.04, 7 / pxPerSec);
+  const hit = near(t, l.onsets, tol);
+  if (hit !== null) {
+    // remove: drop a manual add, or mark a detected hit deleted
+    const added = near(hit, l.added, 0.02);
+    if (added !== null) l.added = l.added.filter((x) => x !== added);
+    else l.removed.push(hit);
+    recompute(l);
+  } else {
+    addHit(l, t); // snaps to a candidate if close, else free-places (your choice)
+  }
+}
+
+// ---- gutter (per-lane threshold sliders; lyric row has none) --------------
+
+function buildGutter() {
+  let g = `<div class="grow axis-spacer"></div>`;
+  for (const l of rows()) {
+    g += `<div class="grow" style="height:${LANE_H}px">
+      <div class="gtop">
+        <span class="dot" style="background:${l.color}"></span>
+        <span class="nm">${l.name}</span>
+        <span class="ct" id="ct-${l.id}" style="color:${l.color}">${l.lyric ? lyrics.length : l.onsets.length}</span>
+      </div>
+      ${
+        l.lyric
+          ? `<span class="gnote">from .lrc · timed</span>`
+          : `<input class="lsens" id="s-${l.id}" type="range" min="0.3" max="3" step="0.1" value="${l.sens}"
+               title="${l.name} threshold — right = more hits" />`
+      }
+    </div>`;
+  }
+  gutter.innerHTML = g;
+  for (const l of state.lanes) {
+    const slider = $(`s-${l.id}`);
+    slider.addEventListener('input', () => {
+      l.sens = Number(slider.value);
+      l.auto = repick(l, state.sampleRate, l.sens);
+      recompute(l); // re-apply manual edits on top
+      refreshCount(l);
+      queueDraw();
+      setStatus(`${countsText()} · tuning — drag a lane slider`, 'ok');
+    });
+  }
+}
+
+function refreshCount(l) {
+  const el = $(`ct-${l.id}`);
+  if (el) el.textContent = l.onsets.length + (l.editCount ? ` ✎${l.editCount}` : '');
+}
+
+// ---- plot -----------------------------------------------------------------
+
+let drawQueued = false;
+function queueDraw() {
+  if (drawQueued) return;
+  drawQueued = true;
+  requestAnimationFrame(() => { drawQueued = false; drawPlot(); });
+}
+
+function drawPlot() {
+  if (!state) return;
+  const list = rows();
+  const width = Math.max(scroll.clientWidth, Math.ceil(state.duration * pxPerSec));
+  const height = AXIS_H + list.length * LANE_H;
+  content.style.width = width + 'px';
+  content.style.height = height + 'px';
+
+  let html = '';
+  const step = pxPerSec >= 80 ? 1 : pxPerSec >= 40 ? 2 : 5;
+  for (let s = 0; s <= state.duration; s += step) {
+    const x = s * pxPerSec;
+    const major = s % 5 === 0;
+    html += `<div class="grid${major ? ' major' : ''}" style="left:${x}px;height:${height}px"></div>`;
+    if (major) html += `<div class="axlab" style="left:${x + 3}px">${fmt(s)}</div>`;
+  }
+  // candidate guide (faint full-height lines) — snap targets. Off by default:
+  // a dense mix has a transient every ~60ms, so shown they're a wall. Snapping
+  // still uses the full candidate set whether or not they're drawn.
+  if (candtog.checked) {
+    for (const c of state.candidates) {
+      html += `<div class="cand" style="left:${(c * pxPerSec).toFixed(1)}px;height:${height}px"></div>`;
+    }
+  }
+  list.forEach((l, i) => {
+    const top = AXIS_H + i * LANE_H;
+    html += `<div class="lane" style="top:${top}px;height:${LANE_H}px"></div>`;
+    if (l.lyric) {
+      for (const ln of lyrics) {
+        const x = ln.t * pxPerSec;
+        html += `<i style="left:${x.toFixed(1)}px;top:${top + 8}px;height:${LANE_H - 16}px;background:${l.color}"></i>`;
+        html += `<span class="lyr" style="left:${(x + 4).toFixed(1)}px;top:${top + 6}px" title="${esc(ln.text)}">${esc(ln.text)}</span>`;
+      }
+    } else {
+      const tickTop = top + 10;
+      const tickH = LANE_H - 20;
+      const addedSet = new Set(l.added);
+      for (const t of l.onsets) {
+        const edited = addedSet.has(t) ? ' edited' : '';
+        html += `<i class="${edited.trim()}" style="left:${(t * pxPerSec).toFixed(1)}px;top:${tickTop}px;height:${tickH}px;background:${l.color}"></i>`;
+      }
+    }
+  });
+  content.innerHTML = html;
+  content.appendChild(ph);
+  ph.style.height = height + 'px';
+  movePlayhead(video.currentTime || 0);
+}
+
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function movePlayhead(t) {
+  ph.style.left = t * pxPerSec + 'px';
+  tcur.textContent = fmt(t);
+  if (isFinite(video.duration) && video.duration > 0) seek.value = String((t / video.duration) * 100);
+  updateKaraoke(t);
+}
+
+// ---- lane hit-testing for edits -------------------------------------------
+
+function laneAtY(y) {
+  const idx = Math.floor((y - AXIS_H) / LANE_H);
+  return idx >= 0 && idx < state.lanes.length ? state.lanes[idx] : null; // null = lyric row / outside
+}
+
+content.addEventListener('click', (e) => {
+  if (!state) return;
+  const x = e.clientX - content.getBoundingClientRect().left;
+  const t = Math.max(0, x / pxPerSec);
+  video.currentTime = t;
+  movePlayhead(t);
+});
+
+content.addEventListener('dblclick', (e) => {
+  if (!state) return;
+  const rect = content.getBoundingClientRect();
+  const l = laneAtY(e.clientY - rect.top);
+  if (!l) return;
+  const t = Math.max(0, (e.clientX - rect.left) / pxPerSec);
+  toggleAt(l, t);
+  refreshCount(l);
+  queueDraw();
+  setStatus(`${countsText()} · edited ${l.name}`, 'ok');
+  e.preventDefault();
+});
+
+// ---- zoom + candidate toggle ----------------------------------------------
+
+zoom.addEventListener('input', () => {
+  pxPerSec = Number(zoom.value);
+  zoomVal.textContent = pxPerSec + ' px/s';
+  if (state) queueDraw();
+});
+candtog.addEventListener('change', () => { if (state) queueDraw(); });
+
+// ---- transport (custom bar below the video) -------------------------------
+
+pp.addEventListener('click', () => (video.paused ? video.play() : video.pause()));
+seek.addEventListener('input', () => {
+  if (isFinite(video.duration)) {
+    const t = (Number(seek.value) / 100) * video.duration;
+    video.currentTime = t;
+    movePlayhead(t);
+  }
+});
+video.addEventListener('loadedmetadata', () => (tdur.textContent = fmt(video.duration)));
+video.addEventListener('play', () => { pp.textContent = '⏸'; cancelAnimationFrame(raf); loop(); });
+video.addEventListener('pause', () => { pp.textContent = '▶'; cancelAnimationFrame(raf); });
+video.addEventListener('ended', () => { pp.textContent = '▶'; cancelAnimationFrame(raf); });
+video.addEventListener('seeked', () => movePlayhead(video.currentTime));
+video.addEventListener('timeupdate', () => { if (video.paused) movePlayhead(video.currentTime); });
+
+function loop() {
+  const t = video.currentTime;
+  movePlayhead(t);
+  const x = t * pxPerSec;
+  if (x < scroll.scrollLeft + 40 || x > scroll.scrollLeft + scroll.clientWidth - 120) {
+    scroll.scrollLeft = Math.max(0, x - scroll.clientWidth * 0.3);
+  }
+  raf = requestAnimationFrame(loop);
+}
+
+// ---- keyboard: Space / A / D / 1-2-3 --------------------------------------
+
+function seekBy(d) {
+  if (!isFinite(video.duration)) return;
+  const t = Math.min(video.duration, Math.max(0, video.currentTime + d));
+  video.currentTime = t;
+  movePlayhead(t);
+}
+function tapIn(idx) {
+  if (!state) return;
+  const l = state.lanes[idx];
+  if (!l) return;
+  addHit(l, video.currentTime);
+  refreshCount(l);
+  queueDraw();
+  setStatus(`${countsText()} · tapped ${l.name}`, 'ok');
+}
+document.addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (e.code === 'Space' || k === ' ') { e.preventDefault(); video.paused ? video.play() : video.pause(); }
+  else if (k === 'a') { e.preventDefault(); seekBy(e.shiftKey ? -1 : -0.1); }
+  else if (k === 'd') { e.preventDefault(); seekBy(e.shiftKey ? 1 : 0.1); }
+  else if (k === '1') tapIn(0);
+  else if (k === '2') tapIn(1);
+  else if (k === '3') tapIn(2);
+});
+
+// ---- LRC → timed lyric track ----------------------------------------------
+
+function parseLrc(text) {
+  const re = /\[(\d{1,2}):(\d{2}(?:[.:]\d{1,3})?)\]/g;
+  const out = [];
+  for (const line of text.split(/\r?\n/)) {
+    const stamps = [...line.matchAll(re)];
+    if (!stamps.length) continue;
+    const txt = line.replace(re, '').trim();
+    if (!txt) continue;
+    for (const m of stamps) out.push({ t: parseInt(m[1], 10) * 60 + parseFloat(m[2].replace(':', '.')), text: txt });
+  }
+  return out.sort((a, b) => a.t - b.t);
+}
+
+lrcInput.addEventListener('change', async () => {
+  const f = lrcInput.files && lrcInput.files[0];
+  if (!f) return;
+  const parsed = parseLrc(await f.text());
+  if (!parsed.length) { setStatus(`no timestamps found in “${f.name}”`, 'bad'); return; }
+  lyrics = parsed;
+  if (state) { buildGutter(); drawPlot(); }
+  updateKaraoke(video.currentTime || 0);
+  setStatus(`loaded ${lyrics.length} lyric lines from “${f.name}”`, 'ok');
+});
+
+function updateKaraoke(t) {
+  if (!lyrics) return;
+  let cur = null;
+  for (const ln of lyrics) { if (ln.t <= t + 0.05) cur = ln; else break; }
+  karaoke.textContent = cur ? cur.text : '';
+  if (!cur) karaoke.innerHTML = '<span class="none">♪</span>';
+}
+
+// ---- init -----------------------------------------------------------------
+
+zoomVal.textContent = pxPerSec + ' px/s';
+window.addEventListener('resize', () => state && queueDraw());
