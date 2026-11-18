@@ -30,13 +30,17 @@ const offsetInput = $('offset');
 const copytab = $('copytab');
 const dltab = $('dltab');
 const tabout = $('tabout');
+const clearMediaBtn = $('clearmedia');
+const clearLrcBtn = $('clearlrc');
+const lrcoffset = $('lrcoffset');
 
 const AXIS_H = 22;
 const LANE_H = 64;
 const LYRIC = { id: 'ly', name: 'lyric', color: '#b6a6ff', lyric: true };
 
 let state = null; // { duration, sampleRate, lanes:[...], candidates:[...] }
-let lyrics = null; // [{ t, text }] sorted, or null
+let lyricsRaw = null; // parsed .lrc at its original times, or null
+let lyrics = null; // lyricsRaw shifted by the LRC offset (what everything renders), or null
 let pxPerSec = Number(zoom.value);
 let mediaUrl = null;
 let mediaName = '';
@@ -372,11 +376,58 @@ lrcInput.addEventListener('change', async () => {
   if (!f) return;
   const parsed = parseLrc(await f.text());
   if (!parsed.length) { setStatus(`no timestamps found in “${f.name}”`, 'bad'); return; }
-  lyrics = parsed;
+  lyricsRaw = parsed;
+  applyLyricOffset();
   if (state) { buildGutter(); drawPlot(); }
   updateKaraoke(video.currentTime || 0);
-  setStatus(`loaded ${lyrics.length} lyric lines from “${f.name}”`, 'ok');
+  setStatus(`loaded ${lyricsRaw.length} lyric lines from “${f.name}”`, 'ok');
 });
+
+// LRC offset: shift every lyric time (non-destructive — keeps lyricsRaw intact,
+// so the offset is adjustable back and forth). Positive delays the lyrics.
+function applyLyricOffset() {
+  const off = Number(lrcoffset.value) || 0;
+  lyrics = lyricsRaw ? lyricsRaw.map((l) => ({ t: l.t + off, text: l.text })) : null;
+}
+lrcoffset.addEventListener('input', () => {
+  if (!lyricsRaw) return;
+  applyLyricOffset();
+  if (state) drawPlot();
+  updateKaraoke(video.currentTime || 0);
+});
+
+// ---- clear / unload -------------------------------------------------------
+
+function clearMedia() {
+  video.pause();
+  if (mediaUrl) { URL.revokeObjectURL(mediaUrl); mediaUrl = null; }
+  video.removeAttribute('src');
+  video.load();
+  mediaName = '';
+  state = null;
+  content.innerHTML = '';
+  content.appendChild(ph);
+  gutter.innerHTML = '';
+  tabout.textContent = 'Load a track — the tab is generated from the detected / edited hits.';
+  file.value = ''; // let the same file be re-picked
+  seek.value = '0';
+  tcur.textContent = '0:00.0';
+  tdur.textContent = '0:00.0';
+  setStatus('Upload an audio or video file — analysis runs automatically when it finishes decoding.', '');
+}
+
+function clearLrc() {
+  lyricsRaw = null;
+  lyrics = null;
+  lrcoffset.value = '0';
+  lrcInput.value = '';
+  if (state) { buildGutter(); drawPlot(); }
+  karaoke.innerHTML = '<span class="none">— no lyrics loaded —</span>';
+  setStatus('lyrics cleared', 'ok');
+}
+
+clearMediaBtn.addEventListener('click', clearMedia);
+clearLrcBtn.addEventListener('click', clearLrc);
 
 function updateKaraoke(t) {
   if (!lyrics) return;
