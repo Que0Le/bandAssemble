@@ -534,19 +534,38 @@ async function copyTab() {
   setStatus(ok ? 'tab copied' : 'couldn’t copy — select the tab and copy manually', ok ? 'ok' : 'bad');
 }
 
-function downloadTab() {
-  const text = tabout.textContent;
-  if (!text || !state) return;
-  const blob = new Blob([text + '\n'], { type: 'text/plain' });
+function saveText(text, filename) {
+  const blob = new Blob([text.replace(/\n*$/, '') + '\n'], { type: 'text/plain' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${mediaName || 'drum'}-drums.txt`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-  setStatus('tab downloaded', 'ok');
+}
+
+const LANE_FILE = { hh: 'hihat', sd: 'snare', bd: 'kick' };
+
+// With "separate tracks" on, save one file per track (kick / snare / hi-hat);
+// otherwise the combined tab. Respects "manual only".
+function downloadTab() {
+  if (!state) return;
+  const base = mediaName || 'drum';
+  if (septracks.checked) {
+    let saved = 0;
+    state.lanes.forEach((l, i) => {
+      const text = toDrumTab([{ id: l.id, onsets: manualonly.checked ? l.added : l.onsets }], tabOpts());
+      if (!text) return;
+      saved++;
+      setTimeout(() => saveText(text, `${base}-${LANE_FILE[l.id] || l.id}.txt`), i * 200);
+    });
+    setStatus(saved ? 'downloaded a tab per track (kick / snare / hi-hat)' : 'nothing to download', saved ? 'ok' : 'bad');
+  } else {
+    saveText(tabout.textContent, `${base}-drums.txt`);
+    setStatus('tab downloaded', 'ok');
+  }
 }
 
 copytab.addEventListener('click', copyTab);

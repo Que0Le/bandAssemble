@@ -47,8 +47,9 @@ export function toDrumTab(lanes, { bpm, offset = 0, subdiv = 4, beatsPerBar = 4,
   const totalBars = Math.max(1, Math.ceil(neededCells / cellsPerBar));
   const totalCells = totalBars * cellsPerBar;
 
+  const rowsOut = ROWS.filter((r) => lanes.some((l) => l.id === r.id)); // only emit the lanes passed in
   const grid = {};
-  for (const r of ROWS) {
+  for (const r of rowsOut) {
     const lane = lanes.find((l) => l.id === r.id);
     const cells = new Array(totalCells).fill('-');
     if (lane) {
@@ -72,7 +73,7 @@ export function toDrumTab(lanes, { bpm, offset = 0, subdiv = 4, beatsPerBar = 4,
   const out = [];
   if (separate) {
     // each track as its own full-length block, blank line between tracks
-    for (const r of ROWS) {
+    for (const r of rowsOut) {
       for (let bar = 0; bar < totalBars; bar += barsPerLine) {
         out.push(rowFor(r, bar, Math.min(barsPerLine, totalBars - bar)));
       }
@@ -82,7 +83,7 @@ export function toDrumTab(lanes, { bpm, offset = 0, subdiv = 4, beatsPerBar = 4,
     // interleaved: HH/SD/BD together, blank line between 4-bar systems
     for (let bar = 0; bar < totalBars; bar += barsPerLine) {
       const bars = Math.min(barsPerLine, totalBars - bar);
-      for (const r of ROWS) out.push(rowFor(r, bar, bars));
+      for (const r of rowsOut) out.push(rowFor(r, bar, bars));
       out.push('');
     }
   }
