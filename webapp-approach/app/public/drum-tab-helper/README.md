@@ -12,12 +12,10 @@ hi-hat band looser at the same time.
 
 ## Run
 
-```
-npm install
-npm run gui        # vite on http://localhost:5180
-```
-
-Open the page, pick a media file, let it analyse, then press play.
+It's served by the bandAssemble app itself (see **Where it lives** below) — no
+separate server. Start BA normally (`npm run dev` in `app/`, or the built
+`npm run serve`) and open **🥁 Drum-tab helper** in the top bar, or go straight
+to `/drum-tab-helper/index.html`. Pick a media file, let it analyse, press play.
 
 ## How it works (`classify.js`)
 
@@ -78,33 +76,20 @@ The **Drum tab** panel shows a quantized ASCII tab (copy / download). The
 To use it today: in bandAssemble add a **drums** role, select it, paste the JSON
 into the Sheet box, and **Parse** (it auto-detects JSON → "times kept").
 
-## Integrating into bandAssemble (standalone page `/drum-tab-helper`)
+## Where it lives
 
-This page is intentionally **standalone** — it's well past what the editor's
-helper area should hold, and it shares no state with the app (you paste its JSON
-export in). It's three plain ES modules with no npm deps, so it drops into BA as
-a static page, with no Svelte changes:
+This page lives **inside** bandAssemble, at `app/public/drum-tab-helper/`, and
+is served by the app — in dev Vite serves `public/` at the site root, and on
+build `public/` is copied into `dist/`, which `relay.js` serves. So it starts
+with the main app, at `/drum-tab-helper/index.html`, with **no separate server**
+and no build step of its own. A **🥁 Drum-tab helper** link sits in BA's top bar
+(opens in a new tab, so a live session is never disturbed).
 
-1. Copy `index.html`, `gui.js`, `classify.js`, `drumtab.js` into
-   `app/public/drum-tab-helper/`. Vite serves `public/` at the site root, so in
-   dev it's reachable at `/drum-tab-helper/`. (Asset paths here are relative, so
-   the subpath works.)
-2. Prod is served by `app/relay.js` from `dist/`, and `public/` is copied into
-   `dist/` on build — so `dist/drum-tab-helper/` ships automatically. For a clean
-   `/drum-tab-helper` URL, add a mapping in `relay.js` *before* its SPA fallback:
-
-   ```js
-   // clean URL for the standalone drum-tab helper
-   if (path === '/drum-tab-helper' || path === '/drum-tab-helper/') {
-     path = '/drum-tab-helper/index.html';
-   }
-   ```
-3. Link to it from BA (a header / menu item → `/drum-tab-helper/`), ideally
-   opened in a new tab so it never disturbs the live LAN session.
-
-No Svelte is touched, so the SPA can't regress. If a tighter integration is
-wanted later, `classify.js` and `drumtab.js` are pure and could be imported by
-Svelte components directly, with `gui.js` reworked as the component layer.
+It's still self-contained *code*: three plain ES modules + `index.html`, zero
+npm deps, no Svelte — so it drops in as static files and can't make the app
+regress. The data handoff is one-way and manual: build and copy the chart in the
+**bandAssemble export (JSON)** panel, then in BA add a **drums** role, paste it
+into the Sheet box, and **Parse**.
 
 ## What to expect
 
@@ -123,4 +108,4 @@ If native band energy proves too noisy here, the next rungs are Essentia.js
 - `classify.js` — decode, band-split, envelope, onset picking + candidates (pure).
 - `drumtab.js` — tempo estimate, ASCII tab + bandAssemble chart JSON (pure).
 - `gui.js` — all DOM wiring: timeline, transport, editing, loop/repeat, exports.
-- `index.html` — the shell + styles (relative asset paths for subpath mounting).
+- `index.html` — the shell + styles (relative asset paths, so it serves from any location).

@@ -39,6 +39,14 @@
       >bandAssemble</a
     > <span class="tag">svelte port</span>
   </h1>
+  <a
+    class="navlink"
+    href="/drum-tab-helper/index.html"
+    target="_blank"
+    rel="noopener"
+    title="Drum-tab helper — detect kick/snare/hi-hat from an audio or video file and export a timed drum chart to paste in here. Opens in a new tab."
+    >🥁 Drum-tab helper</a
+  >
   <span class="build" title="Build timestamp. If two devices show different values, one is on a stale bundle — hard-reload it.">build {__APP_BUILD__}</span>
   {#if session}
     <div class="pill" class:ok={session.conn === 'connected'} class:bad={session.conn !== 'connected'}>
@@ -229,6 +237,23 @@
     font-size: 0.8rem;
     color: #7ee0a0;
     font-weight: 600;
+  }
+  /* Top-bar link to the standalone drum-tab helper (served by this app at
+     /drum-tab-helper/, opened in a new tab so it never disturbs a live session). */
+  .navlink {
+    align-self: center;
+    padding: 4px 10px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--fg);
+    text-decoration: none;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    white-space: nowrap;
+  }
+  .navlink:hover {
+    border-color: var(--accent);
+    color: var(--accent);
   }
   /* Build stamp — muted, pushed to the right so the connection pill sits beside it. */
   .build {
