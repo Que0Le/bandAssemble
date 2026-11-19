@@ -79,3 +79,81 @@ export function toDrumTab(lanes, { bpm, offset = 0, subdiv = 4, beatsPerBar = 4,
   }
   return out.join('\n').replace(/\n+$/, '');
 }
+
+// ---- bandAssemble export --------------------------------------------------
+
+const r2 = (t) => Math.round(Math.max(0, t) * 100) / 100;
+
+/** Build a bandAssemble Chart object the editor can import directly:
+ *  { title, roleId, objects }. Drum bars are grouped into timed TabObjects —
+ *  `barsPerBlock` bars each, or (with `alignLyrics`) broken at lyric-line
+ *  boundaries so each block sticks with its lyric sentence (and is captioned
+ *  with it, as a COMMENT). Every block carries its own startSec/endSec, lyric-
+ *  independent, so a solo lands exactly; empty blocks are skipped. The lyric is
+ *  only ever a block caption (which bandAssemble shows as a note above the tab),
+ *  never its own line object. Times are numeric seconds only (the editor's clock
+ *  parser takes whole-second "m:ss", so startSec carries sub-second precision). */
+export function toChart(lanes, {
+  bpm, offset = 0, subdiv = 4, beatsPerBar = 4, barsPerBlock = 1,
+  title = 'drums', roleId = 'drums', lyrics = null, alignLyrics = false,
+} = {}) {
+  const objects = [];
+  if (bpm > 0) {
+    const cell = 60 / bpm / subdiv;
+    const barDur = beatsPerBar * (60 / bpm);
+    const cellsPerBar = beatsPerBar * subdiv;
+    const rowsOut = ROWS.filter((r) => lanes.some((l) => l.id === r.id));
+    let maxT = 0;
+    for (const l of lanes) for (const t of l.onsets) if (t > maxT) maxT = t;
+    const totalBars = maxT > offset ? Math.ceil((maxT - offset) / barDur) + 1 : 0;
+    const grid = {};
+    for (const r of rowsOut) {
+      const lane = lanes.find((l) => l.id === r.id);
+      const cells = new Array(totalBars * cellsPerBar).fill('-');
+      if (lane) for (const t of lane.onsets) { const i = Math.round((t - offset) / cell); if (i >= 0 && i < cells.length) cells[i] = r.glyph; }
+      grid[r.id] = cells;
+    }
+
+    // Block boundaries = bar indices where a new TabObject starts.
+    const aligned = alignLyrics && lyrics && lyrics.length > 0;
+    const barOf = (t) => Math.max(0, Math.min(totalBars, Math.round((t - offset) / barDur)));
+    let bounds;
+    if (aligned) {
+      const set = new Set([0, totalBars]);
+      for (const l of lyrics) set.add(barOf(l.t)); // a new block at each lyric line
+      bounds = [...set].sort((a, b) => a - b);
+    } else {
+      const step = Math.max(1, barsPerBlock);
+      bounds = [];
+      for (let b = 0; b <= totalBars; b += step) bounds.push(Math.min(b, totalBars));
+      if (bounds[bounds.length - 1] !== totalBars) bounds.push(totalBars);
+    }
+    const lyricByBar = new Map();
+    if (aligned) for (const l of lyrics) lyricByBar.set(barOf(l.t), l); // the lyric that opens each block
+
+    for (let i = 0; i < bounds.length - 1; i++) {
+      const startBar = bounds[i];
+      const endBar = bounds[i + 1];
+      if (endBar <= startBar) continue;
+      const nbars = endBar - startBar;
+      const lines = rowsOut.map((r) => {
+        let row = r.label + '|';
+        for (let b = 0; b < nbars; b++) { const from = (startBar + b) * cellsPerBar; row += grid[r.id].slice(from, from + cellsPerBar).join('') + '|'; }
+        return row;
+      });
+      if (!lines.some((ln) => /[xo]/.test(ln))) continue; // skip blocks with no hits
+      const start = offset + startBar * barDur;
+      const end = offset + endBar * barDur;
+      let caption;
+      if (aligned) {
+        const ly = lyricByBar.get(startBar);
+        caption = ly ? ly.text.slice(0, 48) : `bars ${startBar + 1}–${endBar}`;
+      } else {
+        caption = nbars === 1 ? `bar ${startBar + 1}` : `bars ${startBar + 1}–${endBar}`;
+      }
+      objects.push({ type: 'tab', startSec: r2(start), endSec: r2(end), caption, lines });
+    }
+  }
+  objects.sort((a, b) => a.startSec - b.startSec);
+  return { title, roleId, objects };
+}

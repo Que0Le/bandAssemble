@@ -3,7 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>bandAssemble · Drum-hit helper (prototype)</title>
+    <link rel="icon" href="data:," />
+    <title>bandAssemble · Drum-hit helper</title>
     <style>
       :root {
         --bg: #0d1117; --panel: #161b22; --line: #30363d; --fg: #e6edf3;
@@ -181,6 +182,18 @@
       <pre id="tabout" class="tabout">Load a track — the tab is generated from the detected / edited hits.</pre>
     </details>
 
+    <details class="tabpanel">
+      <summary>⇩ bandAssemble export (JSON)</summary>
+      <div class="tabctl">
+        <label title="How many bars go into each tab block">bars/block <input id="barsperblock" type="number" min="1" max="16" value="1" /></label>
+        <label title="Break drum blocks at lyric-line boundaries; each block carries its lyric as a caption/comment (needs an LRC)"><input id="alignlyrics" type="checkbox" /> break at lyrics (lyric as comment)</label>
+        <button id="buildjson" title="Generate a timed drum chart from the current hits">Build JSON</button>
+        <button id="copyjson" title="Copy the chart JSON">⧉ Copy</button>
+        <button id="dljson" title="Download the chart JSON">⭳ Download</button>
+      </div>
+      <pre id="jsonout" class="tabout">Click “Build JSON” — a bandAssemble chart { title, roleId:"drums", objects:[ timed tab blocks ] } from the current hits (respects the per-track sources above).</pre>
+    </details>
+
     <p class="hint">
       <b>Click</b> a track to seek. <b>Double-click</b> a lane to add a hit (snaps to a detected
       <span style="color:var(--cand)">candidate</span> if one is close, else drops where you click) — double-click a hit to remove it.
@@ -190,6 +203,7 @@
       Pick an A–B range, then <b>Repeat pattern</b> tiles that groove (grid-locked to BPM) to the end.
     </p>
 
-    <script type="module" src="/gui.js"></script>
+    <!-- Relative so the page works at any mount path (e.g. /drum-tab-helper/). -->
+    <script type="module" src="./gui.js"></script>
   </body>
 </html>

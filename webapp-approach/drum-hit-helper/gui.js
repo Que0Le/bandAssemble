@@ -5,7 +5,7 @@
 // the keyboard, and map an uploaded .lrc onto a timed lyric track.
 
 import { analyze, repick, decodeFile } from './classify.js';
-import { estimateTempo, toDrumTab } from './drumtab.js';
+import { estimateTempo, toDrumTab, toChart } from './drumtab.js';
 
 const $ = (id) => document.getElementById(id);
 const file = $('file');
@@ -30,6 +30,12 @@ const offsetInput = $('offset');
 const copytab = $('copytab');
 const dltab = $('dltab');
 const tabout = $('tabout');
+const alignlyrics = $('alignlyrics');
+const barsperblock = $('barsperblock');
+const buildjson = $('buildjson');
+const copyjson = $('copyjson');
+const dljson = $('dljson');
+const jsonout = $('jsonout');
 const clearMediaBtn = $('clearmedia');
 const clearLrcBtn = $('clearlrc');
 const lrcoffset = $('lrcoffset');
@@ -493,12 +499,13 @@ function laneHits(l) {
   if (srcOn(l.id, 'manual')) hits.push(...l.added);
   return hits.sort((a, b) => a - b);
 }
+// The lanes the tab / JSON export should contain: those with a source checked,
+// each reduced to its selected (synth/manual) hits.
+const selectedLanes = () =>
+  state.lanes.filter((l) => srcOn(l.id, 'synth') || srcOn(l.id, 'manual')).map((l) => ({ id: l.id, onsets: laneHits(l) }));
 function renderTab() {
   if (!state) return;
-  const lanes = state.lanes
-    .filter((l) => srcOn(l.id, 'synth') || srcOn(l.id, 'manual'))
-    .map((l) => ({ id: l.id, onsets: laneHits(l) }));
-  tabout.textContent = toDrumTab(lanes, tabOpts()) || '(no tracks selected)';
+  tabout.textContent = toDrumTab(selectedLanes(), tabOpts()) || '(no tracks selected)';
 }
 
 // On a fresh analysis: seed the BPM from the kick+snare pulse and align the grid
@@ -514,16 +521,11 @@ function seedTab() {
 
 for (const el of [bpm, grid, offsetInput]) el.addEventListener('input', () => { renderTab(); if (state) drawPlot(); });
 
-async function copyTab() {
-  const text = tabout.textContent;
-  // navigator.clipboard needs a secure context — absent over plain http on the
-  // LAN (phones), so fall back to a hidden textarea + execCommand.
+// Copy text to the clipboard. navigator.clipboard needs a secure context —
+// absent over plain http on the LAN (phones) — so fall back to execCommand.
+async function clip(text) {
   try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text);
-      setStatus('tab copied', 'ok');
-      return;
-    }
+    if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return true; }
   } catch { /* fall through */ }
   const ta = document.createElement('textarea');
   ta.value = text;
@@ -534,6 +536,10 @@ async function copyTab() {
   let ok = false;
   try { ok = document.execCommand('copy'); } catch { /* ignore */ }
   ta.remove();
+  return ok;
+}
+async function copyTab() {
+  const ok = await clip(tabout.textContent);
   setStatus(ok ? 'tab copied' : 'couldn’t copy — select the tab and copy manually', ok ? 'ok' : 'bad');
 }
 
@@ -560,6 +566,42 @@ dltab.addEventListener('click', downloadTab);
 for (const id of ['hh-synth', 'hh-manual', 'sd-synth', 'sd-manual', 'bd-synth', 'bd-manual']) {
   const el = $(id);
   if (el) el.addEventListener('change', renderTab);
+}
+
+// ---- bandAssemble chart JSON export ---------------------------------------
+
+function buildChart() {
+  return toChart(selectedLanes(), {
+    ...tabOpts(),
+    barsPerBlock: Math.max(1, Number(barsperblock.value) || 1),
+    title: mediaName || 'drums',
+    roleId: 'drums',
+    lyrics, // passed for boundary alignment + block captions (never its own line)
+    alignLyrics: alignlyrics.checked,
+  });
+}
+function showJson() {
+  if (!state) return null;
+  const chart = buildChart();
+  jsonout.textContent = JSON.stringify(chart, null, 2);
+  return chart;
+}
+buildjson.addEventListener('click', () => {
+  const chart = showJson();
+  if (chart) setStatus(`built chart JSON · ${chart.objects.length} objects`, 'ok');
+});
+copyjson.addEventListener('click', async () => {
+  if (!showJson()) return;
+  const ok = await clip(jsonout.textContent);
+  setStatus(ok ? 'chart JSON copied' : 'couldn’t copy — select the JSON and copy manually', ok ? 'ok' : 'bad');
+});
+dljson.addEventListener('click', () => {
+  if (!showJson()) return;
+  saveText(jsonout.textContent, `${mediaName || 'drum'}-drums.chart.json`);
+  setStatus('chart JSON downloaded', 'ok');
+});
+for (const el of [alignlyrics, barsperblock]) {
+  el.addEventListener('input', () => { if (state && !jsonout.textContent.startsWith('Click')) showJson(); });
 }
 
 // ---- loop + grid-locked pattern repeat ------------------------------------
